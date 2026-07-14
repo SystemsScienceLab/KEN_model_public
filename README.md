@@ -9,9 +9,7 @@ This version of the KEN model corresponds to the KEN model description and first
 - KEN Model: Data, code, visualizations, and run files.
 
 ## Documentation
-See the paper:
-Miess, M., Ilyas, A., Wang, D., Foramitti, F., Naqvi, A., Wada, Y. (2026, under review) Transformation dynamics of an energy-rich and water-scarce economy in the Middle East. 
-For preprint on SSRN, see this link: (preprint link forthcoming).
+See "Transformation dynamics of an energy-rich and water-scarce economy in the Middle East" under this link: (SSRN preprint link forthcoming).
 
 ## To prepare your local system:
 
