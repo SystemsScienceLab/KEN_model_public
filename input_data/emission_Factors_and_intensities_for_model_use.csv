@@ -1,0 +1,87 @@
+sector;gas_Emission_intensities (MtCO2/Thousand SAR);electricity_Emission_intensities (MtCO2/Thousand SAR);oil_Emission_intensities (MtCO2/Thousand SAR)
+Crop and animal production, hunting and related service activities;0;0.0000000274648;0
+Forestry and logging;0;0.000000149597;0
+Fishing and aquaculture;0;0.0000000069141;0
+Mining of coal and lignite;0.0000000368042;0.00000000032795;0.00000000178269
+Extraction of crude petroleum and natural gas;0.00000000588936;0.0000000000524782;0.00000000435132
+Mining of metal ores;0.000000246808;0.00000000219922;0.00000000225126
+Other mining and quarrying activities;0.0000000248572;0.000000000221494;0.0000000198955
+Mining support service activities;0.0000000201954;0.000000000179955;0.0000000204644
+Manufacture of food products;0.0000000000301322;0.00000000000525248;0.00000000196719
+Manufacture of beverages;0.00000000316535;0.000000000551767;0.00000000569533
+Manufacture of tobacco products;0.00000000398708;0.000000000695007;0.00000000858279
+Manufacture of textiles;0.00000000170226;0.000000000296729;0.0000000117423
+Manufacture of wearing apparel;0.00000000202255;0.000000000352559;0.00000000889506
+Manufacture of leather and related products;0.00000000113384;0.000000000197646;0.0000000326334
+Manufacture of woods, wood products and cork except furniture;0.0000000287444;0.00000000501057;0.0000000185877
+Manufacture of paper and paper products;0.0000000132582;0.0000000023111;0.0000000040251
+Printing and reproduction of recorded media;0.0000000981886;0.0000000171157;0.00000000920086
+Manufacture of coke and refined petroleum products;0.0000000393564;0.00000000686039;0.000000164819
+Manufacture of chemicals and chemical products;0.0000000971015;0.0000000169262;0.000000125088
+Manufacture of basic pharmaceutical products and pharmaceutical preparations;0.00000000713166;0.00000000124315;0.0000000147942
+Manufacture of rubber and plastics products;0.00000000527847;0.000000000920114;0.0000000638721
+Manufacture of other non-metallic mineral products;0.0000000906521;0.000000015802;0.0000000586183
+Manufacture of basic metals;0.0000000309827;0.00000000540074;0.0000000848075
+Manufacture of fabricated metal products, except machinery and equipment;0.0000000211526;0.00000000368721;0.0000000220045
+Manufacture of computer, electronic and optical products;0.00000000727824;0.0000000012687;0.000000027439
+Manufacture of electrical equipment;0.0000000264228;0.00000000460589;0.0000000151763
+Manufacture of machinery and equipment n.e.c.;0.0000000368525;0.00000000642392;0.0000000135396
+Manufacture of motor vehicles, trailers and semi-trailers;0.000000007758;0.00000000135233;0.0000000120918
+Manufacture of other transport equipment;0.0000000110337;0.00000000192334;0.0000000115473
+Manufacture of furniture;0.00000000353676;0.00000000061651;0.00000000868298
+Other manufacturing;0.00000000683619;0.00000000119165;0.0000000149461
+Repair and installation of machinery and equipment;0;0.0000000610748;0.00000000566828
+"Electricity, gas, steam and air conditioning supply";0;0.000000624802;0.0000000241001
+Water collection, treatment and supply;0;0.0000000101954;0.00000010276
+Sewerage;0;0.0000000000393628;0.0000000783451
+"Waste collection, treatment and disposal activities; materials recovery";0;0.000000000226474;0.00000000739794
+Remediation activities and other waste management services;0;0.000000000299041;0.000000013964
+Construction of buildings;0;0.0000000000228645;0.0000000134673
+Civil engineering;0;0.000000000035243;0.0000000800466
+Specialized construction activities;0;0.0000000000983339;0.00000000989752
+Wholesale and retail trade and repair of motor vehicles and motorcycles;0.00000000000297555;0;0.000000220309
+Wholesale trade, except of motor vehicles and motorcycles;0.00000000000338562;0;0.0000000819533
+Retail trade, except of motor vehicles and motorcycles;0.00000000000483213;0;0.0000000747397
+Land transport and transport via pipelines;0.0000000000010821;0;0.000000434257
+Water transport;0.000000000000230046;0;0.000000470952
+Air transport;0.00000000000009025;0;0.000000520589
+Warehousing and support activities for transportation;0.00000000000558256;0;0.000000192479
+Postal and courier activities;0.00000000000271586;0;0.000000102131
+Accommodation;0.00000000000135847;0;0.0000000330351
+Food and beverage service activities;0.000000000000093;0;0.00000000794607
+Publishing activities;0.000000000000204672;0;0.0000000673757
+"Motion picture, video and television programme production, sound recording and music publishing activities";0.000000000000705346;0;0.0000000194614
+Programming and broadcasting activities;0.00000000000205613;0;0.0000000121919
+Telecommunications;0.000000000000480251;0;0.0000000756605
+Computer programming, consultancy and related activities;0.0000000000000885975;0;0.0000000193251
+Information service activities;0.000000000000501245;0;0.0000000987852
+Financial service activities, except insurance and pension funding;0.0000000000000269453;0;0.00000000385192
+"Insurance, reinsurance and pension funding, except compulsory social security";0.00000000000000691502;0;0.00000000256474
+Activities auxiliary to financial service and insurance activities;0.0000000000000553014;0;0.0000000101905
+Real estate activities;0.00000000000134505;0;0.00000000238632
+Legal and accounting activities;0.00000000000691873;0;0.0000000880304
+"Activities of head offices; management consultancy activities";0.00000000000119302;0;0.000000153881
+"Architectural and engineering activities; technical testing and analysis";0.000000000000163111;0;0.0000000112804
+Scientific research and development;0.00000000000624593;0;0.0000000240535
+Advertising and market research;0.00000000000103689;0;0.00000014613
+Other professional, scientific and technical activities;0.00000000000174782;0;0.0000000899834
+Veterinary activities;0.00000000000389498;0;0.000000117335
+Rental and leasing activities;0.00000000000922307;0;0.000000322006
+Employment activities;0.0000000000050888;0;0.0000000932607
+"Travel agency, tour operator, reservation service and related activities";0.00000000000114872;0;0.000000336996
+Security and investigation activities;0.0000000000114568;0;0.000000338939
+Services to buildings and landscape activities;0.000000000000665845;0;0.000000140637
+Office administrative, office support and other business support activities;0.00000000000083324;0;0.000000053324
+"Public administration and defence; compulsory social security";0.00000000000848461;0;0.000000016149
+Education;0.00000000000531764;0;0.00000000650687
+Human health activities;0.00000000000379941;0;0.0000000135898
+Residential care activities;0.0000000000025922;0;0.0000000429593
+Social work activities without accommodation;0.00000000000191012;0;0.0000000398537
+"Creative, arts and entertainment activities";0.00000000000650577;0;0.0000000526302
+"Libraries, archives, museums and other cultural activities";0.00000000000107937;0;0.0000000024945
+Sports activities and amusement and recreation activities;0.00000000000539371;0;0.00000000535345
+Activities of membership organizations;0.0000000000320573;0;0.00000000587557
+Repair of computers and personal and household goods;0.00000000000497162;0;0.0000000358395
+Other personal service activities;0.00000000000637649;0;0.000000108636
+Desalination;0;0.000000138386;0
+Wwater;0;0.000000110818;0

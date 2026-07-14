@@ -1,0 +1,37 @@
+,,WU_intensity_21
+1,Agriculture,0.114944845
+2,Mining of coal and lignite,2.284590879
+3,Extraction of crude petroleum and natural gas,1.33E-07
+4,Mining of metal ores,9.86E-06
+5,Other mining and quarrying,0.000103317
+6,Mining support services,0.000462573
+7,Manufacture of food products,0.001558168
+8,Manufacture of beverages,0.001867643
+9,Manufacture of tobacco products,0.000487343
+10,Manufacture of textiles,0.000560491
+11,Manufacture of wearing apparel,0.001445843
+12,Manufacture of leather and related products,0.000239965
+13,"Manufacture of wood and of products of wood and cork, except furniture;
+manufacture of articles of straw and plaiting materials",0.00037632
+14,Manufacture of paper and paper products,0.000116091
+15,Printing and reproduction of recorded media,0.000175296
+16,Manufacture of coke and refined petroleum products,0.000392148
+17,Manufacture of chemicals and chemical products,0.002527184
+18,"Manufacture of pharmaceuticals, medicinal chemical and botanical products",0.0002579
+19,Manufacture of rubber and plastics products,0.000141607
+20,Manufacture of other non-metallic mineral products,0.000920174
+21,Manufacture of basic metals,0.001462247
+22,"Manufacture of fabricated metal products, except machinery and equipment",0.001141274
+23,"Manufacture of computer, electronic and optical products",0.000127511
+24,Manufacture of electrical equipment,0.000106391
+25,Manufacture of machinery and equipment n.e.c,0.000144257
+26,"Manufacture of motor vehicles, trailers and semi-trailers",9.25E-05
+27,Manufacture of other transport equipment,0.000128584
+28,Manufacture of furniture,0.001890391
+29,Other manufacturing industries,0.000718156
+30,Repair and installation of machinery and equipment,0.004352778
+31,"Supplies of electricity, gas, steam and air conditioning",0.000385051
+32,"Water collection, treatment and supply",0.010954718
+33,Sewage,1.33E-06
+34,"Waste collection, treatment & disposal activities; materials recovery",0.000142406
+35,Services,0.001011953

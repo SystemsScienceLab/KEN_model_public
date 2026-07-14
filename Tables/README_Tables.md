@@ -1,0 +1,1 @@
+Tables should be saved locally only, not committed to the repository to avoid unnecessary conflicts. They are generated through the two top-level run files.

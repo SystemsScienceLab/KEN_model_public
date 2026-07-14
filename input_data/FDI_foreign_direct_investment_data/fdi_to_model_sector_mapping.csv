@@ -1,0 +1,86 @@
+model_sector_index,model_sector_name,fdi_sector_name
+0,"Crop and animal production, hunting and related service activities","Agriculture, forestry and fishing"
+1,Forestry and logging,"Agriculture, forestry and fishing"
+2,Fishing and aquaculture,"Agriculture, forestry and fishing"
+3,Mining of coal and lignite,Mining and Quarrying
+4,Extraction of crude petroleum and natural gas,Mining and Quarrying
+5,Mining of metal ores,Mining and Quarrying
+6,Other mining and quarrying activities,Mining and Quarrying
+7,Mining support service activities,Mining and Quarrying
+8,Manufacture of food products,Manufacturing
+9,Manufacture of beverages,Manufacturing
+10,Manufacture of tobacco products,Manufacturing
+11,Manufacture of textiles,Manufacturing
+12,Manufacture of wearing apparel,Manufacturing
+13,Manufacture of leather and related products,Manufacturing
+14,"Manufacture of woods, wood products and cork except furniture",Manufacturing
+15,Manufacture of paper and paper products,Manufacturing
+16,Printing and reproduction of recorded media,Manufacturing
+17,Manufacture of coke and refined petroleum products,Manufacturing
+18,Manufacture of chemicals and chemical products,Manufacturing
+19,Manufacture of basic pharmaceutical products and pharmaceutical preparations,Manufacturing
+20,Manufacture of rubber and plastics products,Manufacturing
+21,Manufacture of other non-metallic mineral products,Manufacturing
+22,Manufacture of basic metals,Manufacturing
+23,"Manufacture of fabricated metal products, except machinery and equipment",Manufacturing
+24,"Manufacture of computer, electronic and optical products",Manufacturing
+25,Manufacture of electrical equipment,Manufacturing
+26,Manufacture of machinery and equipment n.e.c.,Manufacturing
+27,"Manufacture of motor vehicles, trailers and semi-trailers",Manufacturing
+28,Manufacture of other transport equipment,Manufacturing
+29,Manufacture of furniture,Manufacturing
+30,Other manufacturing,Manufacturing
+31,Repair and installation of machinery and equipment,Manufacturing
+32,"Electricity, gas, steam and air conditioning supply","Electricity, Gas, Steam And Air Conditioning Supply"
+33,"Water collection, treatment and supply","Water supply; sewerage, waste management and remediation activities"
+34,Sewerage,"Water supply; sewerage, waste management and remediation activities"
+35,"Waste collection, treatment and disposal activities; materials recovery","Water supply; sewerage, waste management and remediation activities"
+36,Remediation activities and other waste management services,"Water supply; sewerage, waste management and remediation activities"
+37,Construction of buildings,Construction
+38,Civil engineering,Construction
+39,Specialized construction activities,Construction
+40,Wholesale and retail trade and repair of motor vehicles and motorcycles,Wholesale And Retail Trade
+41,"Wholesale trade, except of motor vehicles and motorcycles",Wholesale And Retail Trade
+42,"Retail trade, except of motor vehicles and motorcycles",Wholesale And Retail Trade
+43,Land transport and transport via pipelines,Transportation and Storage
+44,Water transport,Transportation and Storage
+45,Air transport,Transportation and Storage
+46,Warehousing and support activities for transportation,Transportation and Storage
+47,Postal and courier activities,Transportation and Storage
+48,Accommodation,Accommodation And Food Service Activities
+49,Food and beverage service activities,Accommodation And Food Service Activities
+50,Publishing activities,Information and Communication
+51,"Motion picture, video and television programme production, sound recording and music publishing activities",Information and Communication
+52,Programming and broadcasting activities,Information and Communication
+53,Telecommunications,Information and Communication
+54,"Computer programming, consultancy and related activities",Information and Communication
+55,Information service activities,Information and Communication
+56,"Financial service activities, except insurance and pension funding",Financial and Insurance Activities
+57,"Insurance, reinsurance and pension funding, except compulsory social security",Financial and Insurance Activities
+58,Activities auxiliary to financial service and insurance activities,Financial and Insurance Activities
+59,Real estate activities,Real Estate Activities
+60,Legal and accounting activities,"Professional, Scientific and Technical Activities"
+61,Activities of head offices; management consultancy activities,"Professional, Scientific and Technical Activities"
+62,Architectural and engineering activities; technical testing and analysis,"Professional, Scientific and Technical Activities"
+63,Scientific research and development,"Professional, Scientific and Technical Activities"
+64,Advertising and market research,"Professional, Scientific and Technical Activities"
+65,"Other professional, scientific and technical activities","Professional, Scientific and Technical Activities"
+66,Veterinary activities,"Professional, Scientific and Technical Activities"
+67,Rental and leasing activities,Administrative and Support Service Activities
+68,Employment activities,Administrative and Support Service Activities
+69,"Travel agency, tour operator, reservation service and related activities",Administrative and Support Service Activities
+70,Security and investigation activities,Administrative and Support Service Activities
+71,Services to buildings and landscape activities,Administrative and Support Service Activities
+72,"Office administrative, office support and other business support activities",Administrative and Support Service Activities
+73,Public administration and defence; compulsory social security,
+74,Education,Education
+75,Human health activities,Human Health and Social Work Activities
+76,Residential care activities,Human Health and Social Work Activities
+77,Social work activities without accommodation,Human Health and Social Work Activities
+78,"Creative, arts and entertainment activities","Arts, entertainment and recreation"
+79,"Libraries, archives, museums and other cultural activities","Arts, entertainment and recreation"
+80,Sports activities and amusement and recreation activities,"Arts, entertainment and recreation"
+81,Activities of membership organizations,Other service activities
+82,Repair of computers and personal and household goods,Other service activities
+83,Other personal service activities,Other service activities
+84,Desalination,
