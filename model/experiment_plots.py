@@ -348,8 +348,8 @@ def plot_macro_comparison(reports):
 
     _plot_panel(ax5, reports,
                 [('Gov_rev', 'Revenue'),
-                 ('Gov_exp', 'Expenditure')],
-                title='Government - Revenue & Expenditure',
+                 ('Gov_exp', 'Total expenditure')],
+                title='Government - Revenue & Total Expenditure',
                 scenario_colors=scenario_colors, ylabel="Trillion SAR", zero_line=False, 
                 show_legend=True, legend_loc='best', legend_fontsize=16,
                 gdp_share=True)
@@ -369,9 +369,191 @@ def plot_macro_comparison(reports):
     plt.show()
 
 
- # 
+ #
+# GDP EXPENDITURE IDENTITY DECOMPOSITION  (standalone, one panel per scenario)
+ #
+
+# Component colours. These are keyed by GDP COMPONENT, not by scenario, so the
+# module-level scenario_colors cannot be reused here. Validated as an adjacent-pair
+# categorical set on a white surface: worst CVD dE 9.1 (>=8 target), worst
+# normal-vision dE 19.6 (>=15 floor). Three of the five sit below 3:1 contrast on
+# white, so the direct share labels drawn inside each band are mandatory, not
+# decorative - identity must never rest on colour alone.
+GDP_COMPONENT_COLORS = {
+    'Y_C':  '#2a78d6',   # blue
+    'Y_G':  '#eb6834',   # orange
+    'Y_I':  '#1baf7a',   # aqua
+    'Y_EX': '#eda100',   # yellow
+    'Y_IM': '#e87ba4',   # magenta
+}
+
+# Stacked in GDP identity order: Y_ = Y_C_ + Y_G_ + Y_I_ + Y_EX_ - Y_IM_
+GDP_COMPONENT_LABELS = [
+    ('Y_C',  'Consumption C'),
+    ('Y_G',  'Government consumption G'),
+    ('Y_I',  'Investment I (demand)'),
+    ('Y_EX', 'Exports EX'),
+]
+
+
+def plot_gdp_identity_decomposition(reports, min_label_share=4.0):
+    """
+    Show that the GDP expenditure components add up EXACTLY to total GDP.
+
+    One panel per scenario, stacked VERTICALLY so each verification is large and legible.
+    Everything is expressed as a share of nominal GDP, so the positive components stack to
+    (100 + import share) % and imports are drawn as a deduction below zero:
+    stack top - import depth = 100% = GDP.
+
+    Series are taken from the dedicated identity columns Y_C, Y_G, Y_I, Y_EX, Y_IM
+    (model_classes.ModelVariables, written in model.py section 12). Those are exact by
+    construction. Do NOT rebuild this from the general macro columns: 'Gov_exp' is a
+    FISCAL total that also carries subsidies, public investment GI (already inside
+    investment), bond interest and repayments, and would overstate G by 9-12 pp of GDP.
+
+    min_label_share: bands thinner than this (in pp of GDP) get no inline label, to
+    avoid unreadable overlapping text.
+    """
+    sns.set_style("whitegrid")
+
+    # ---- pass 1: shares per scenario, so all panels can share one y-scale ----
+    # Different y-scales across panels of the SAME measure invite misreading, so the
+    # limits are computed globally before anything is drawn.
+    all_shares = {}
+    for scenario, runs in reports.items():
+        shares = {}
+        for col in [c for c, _ in GDP_COMPONENT_LABELS] + ['Y_IM']:
+            per_run = [rr["results_macro"][col].values / rr["results_macro"]['Y'].values * 100
+                       for rr in runs if col in rr["results_macro"].columns]
+            shares[col] = np.mean(np.array(per_run), axis=0) if per_run else None
+        all_shares[scenario] = shares
+
+    _tops = [sum(s[c] for c, _ in GDP_COMPONENT_LABELS).max()
+             for s in all_shares.values() if all(v is not None for v in s.values())]
+    _bots = [(-s['Y_IM']).min()
+             for s in all_shares.values() if all(v is not None for v in s.values())]
+    _ylim = ((min(_bots) * 1.18, max(_tops) * 1.06) if _tops and _bots else None)
+
+    # Vertically stacked: one full-width row per scenario, so each verification is large.
+    # The suptitle / legend / caption bands are reserved in INCHES and converted to figure
+    # fractions, because the figure height grows with the number of scenarios and fixed
+    # fractional offsets would drift as panels are added.
+    n = len(reports)
+    _panel_h, _top_band, _bottom_band = 5.2, 0.85, 1.85
+    _fig_h = _panel_h * n + _top_band + _bottom_band
+    fig, axs = plt.subplots(n, 1, figsize=(15, _fig_h), squeeze=False, sharey=True)
+    axs = axs[:, 0]
+
+    worst_resid_pct = 0.0
+
+    for ax_idx, (scenario, runs) in enumerate(reports.items()):
+        ax = axs[ax_idx]
+        shares = all_shares[scenario]
+
+        if any(v is None for v in shares.values()):
+            ax.text(0.5, 0.5, f"Identity columns missing\nfor {scenario}",
+                    ha='center', va='center', transform=ax.transAxes, fontsize=16)
+            continue
+
+        years = list(range(2021, 2021 + len(shares['Y_C'])))
+
+        # --- positive stack, in identity order ---
+        ax.stackplot(years,
+                     *[shares[c] for c, _ in GDP_COMPONENT_LABELS],
+                     labels=[lbl for _, lbl in GDP_COMPONENT_LABELS],
+                     colors=[GDP_COMPONENT_COLORS[c] for c, _ in GDP_COMPONENT_LABELS],
+                     edgecolor='white', linewidth=2.0)   # 2px surface gap between fills
+
+        # --- imports as a deduction below zero (national accounts convention) ---
+        ax.fill_between(years, 0, -shares['Y_IM'],
+                        color=GDP_COMPONENT_COLORS['Y_IM'], label='Imports IM (deduction)',
+                        edgecolor='white', linewidth=2.0)
+
+        # --- the identity itself: computed sum, which must lie ON the 100% line ---
+        computed = (shares['Y_C'] + shares['Y_G'] + shares['Y_I']
+                    + shares['Y_EX'] - shares['Y_IM'])
+        # The computed sum is drawn in the surface colour ON TOP of the solid GDP line, so
+        # the GDP line reads as dashed exactly where the two coincide - and separates
+        # visibly if the identity ever breaks again. It carries no legend entry of its own:
+        # a white line is invisible against the legend surface, so the GDP line's label
+        # explains the dashes instead.
+        ax.axhline(100, color='#0b0b0b', linewidth=3.0, zorder=6,
+                   label='GDP Y = 100%  (dashes = computed C + G + I + EX - IM)')
+        ax.plot(years, computed, color='#fcfcfb', linewidth=1.4, linestyle=(0, (4, 3)),
+                zorder=7, label='_nolegend_')
+
+        resid_pct = float(np.max(np.abs(computed - 100.0)))
+        worst_resid_pct = max(worst_resid_pct, resid_pct)
+
+        # --- direct labels: mandatory relief for the sub-3:1 component colours ---
+        for col, _ in GDP_COMPONENT_LABELS:
+            base = np.zeros(len(years))
+            for c2, _ in GDP_COMPONENT_LABELS:
+                if c2 == col:
+                    break
+                base = base + shares[c2]
+            for x_idx, ha in ((0, 'left'), (len(years) - 1, 'right')):
+                if shares[col][x_idx] < min_label_share:
+                    continue
+                ax.text(years[x_idx], base[x_idx] + shares[col][x_idx] / 2,
+                        f"{shares[col][x_idx]:.0f}%", ha=ha, va='center',
+                        fontsize=13, fontweight='bold', color='#0b0b0b')
+        for x_idx, ha in ((0, 'left'), (len(years) - 1, 'right')):
+            ax.text(years[x_idx], -shares['Y_IM'][x_idx] / 2,
+                    f"-{shares['Y_IM'][x_idx]:.0f}%", ha=ha, va='center',
+                    fontsize=13, fontweight='bold', color='#0b0b0b')
+
+        # --- formatting, matching the conventions used elsewhere in this module ---
+        ax.set_title(SCENARIO_LABELS.get(scenario, scenario.replace('_', ' ')),
+                     fontsize=18, fontweight='bold')
+        ax.set_ylabel("Share of nominal GDP (%)", fontsize=16, fontweight='bold')
+        custom_ticks = [2021] + list(range(2025, years[-1] + 1, 5))
+        ax.set_xticks(custom_ticks)
+        ax.set_xticklabels(custom_ticks, rotation=0, fontsize=14)
+        ax.axhline(0, color='#c3c2b7', linewidth=1.0)
+        ax.set_xlim(years[0], years[-1])
+        if _ylim:
+            ax.set_ylim(*_ylim)
+        # Stacked vertically: the year axis is labelled once, under the bottom panel only.
+        # This must follow set_xticklabels, which would otherwise restore the hidden labels.
+        if ax_idx == n - 1:
+            ax.set_xlabel("Year", fontsize=16, fontweight='bold')
+        else:
+            ax.tick_params(labelbottom=False)
+
+        ax.text(-0.05, 1.05, f"({chr(ord('a') + ax_idx)})", transform=ax.transAxes,
+                fontsize=16, fontweight='bold', va='top')
+
+    # One figure-level legend below the panels: inside an axes it would cover the 2021
+    # share labels, which are the mandatory relief for the low-contrast component colours.
+    # ncol=3 rather than one row: the figure is now narrow, and the GDP-line label is long.
+    _handles, _labels = axs[0].get_legend_handles_labels()
+    fig.legend(_handles, _labels, loc='lower center', ncol=3,
+               bbox_to_anchor=(0.5, 0.80 / _fig_h), fontsize=14, frameon=False)
+
+    fig.suptitle("GDP expenditure identity verification:\n"
+                 "Y = C + G + I + EX - IM", fontsize=20, fontweight='bold')
+    fig.text(0.005, 0.005,
+             "Stacked positive components reach (100 + import share) %; imports are drawn as a "
+             "deduction below zero, so stack top - import depth = 100% of GDP.\n"
+             "The dashed line is the sum computed from the plotted series and should coincide with "
+             "the 100% GDP line.\n"
+             "G is government CONSUMPTION (the GDP component), not total government expenditure "
+             "Gov_exp, which also contains subsidies, public investment GI, and debt service.",
+             fontsize=12, ha='left', va='bottom', color='#52514e')
+
+    # The numeric counterpart to the dashed overlay: reported to the console rather than on
+    # the figure, so the panel caption stays clean. Should be ~1e-14 pp (machine precision).
+    print(f"GDP identity verification: worst deviation of (C + G + I + EX - IM) from GDP "
+          f"across all scenarios and years = {worst_resid_pct:.2e} pp of GDP")
+
+    plt.tight_layout(rect=[0, _bottom_band / _fig_h, 1, 1 - _top_band / _fig_h])
+    plt.show()
+
+
+ #
 # BALANCE OF PAYMENTS SCENARIO COMPARISON  (4-panel, 2 x 2)
- # 
+ #
 
  # 
 # BALANCE OF PAYMENTS SCENARIO COMPARISON  (4-panel, 2 x 2)

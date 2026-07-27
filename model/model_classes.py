@@ -119,6 +119,20 @@ class ModelVariables:
     ex_non_oil_: NDArray                        # Non-Oil Exports real
     IM_: NDArray                                # Imports nominal
     im_: NDArray                                # Imports real
+    #################################################################################################################################################
+    # GDP expenditure identity: Y_ = Y_C_ + Y_G_ + Y_I_ + Y_EX_ - Y_IM_
+    # Published as their own series so a components check can never be assembled from
+    # mismatched aggregates (Gov_exp is a FISCAL total that also contains public investment,
+    # bond interest, repayments and transfers; I_total is investment OWNERSHIP).
+    #################################################################################################################################################
+    Y_C_: NDArray                               # GDP component: household consumption entering the identity (= pc.dC * C)
+    Y_G_: NDArray                               # GDP component: government consumption entering the identity (= pc.dG * GY). NOT Gov_exp.
+    Y_I_: NDArray                               # GDP component: investment demand entering the identity (= I_demand_). NOT I_total.
+    Y_EX_: NDArray                              # GDP component: exports entering the identity (= EX_oil_ + EX_non_oil_)
+    Y_IM_: NDArray                              # GDP component: imports entering the identity (= IM_), enters with a MINUS sign
+    GDP_identity_residual_: NDArray             # Sectoral residual: Y_ - (Y_C_ + Y_G_ + Y_I_ + Y_EX_ - Y_IM_). Must be ~0.
+    GDP_identity_residual: NDArray              # Aggregate residual of the GDP expenditure identity (must be ~0)
+    IM_substitution_forgone: NDArray            # Import substitution intent that could not be booked because IM_ hit zero (GDP increase forgone)
     W_: NDArray                                 # Nominal Wages vector (compensation of employees) from IOTs
     w_: NDArray                                 # REAL wages vector (deflated by aggregate price level; sectoral CPI deflation not implemented)
     DEPR_: NDArray                              # Depreciation of capital stock from IOTs

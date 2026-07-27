@@ -378,6 +378,12 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
     ########################################################################################################################################################################################################################
 
     ########################################################################################################################################################################################################################
+    # 4.1 Irrigation costs (investment, O&M, subsidy)
+    ########################################################################################################################################################################################################################
+    apply_irrigation_costs(v, pc, t)
+
+
+    ########################################################################################################################################################################################################################
     ########################################################################################################################################################################################################################
     # 5. Exports, imports, government spending (exogenous, preferably time-series based)
     ########################################################################################################################################################################################################################
@@ -905,6 +911,13 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
     ########################################################################################################################################################################################################################
     # 9. Re-calculate output (realized final demand and supply)
     ########################################################################################################################################################################################################################
+    # EX_ was built in exports_module BEFORE green exports were added to EX_non_oil_
+    # (calculate_green_exports_and_substitution above), so refresh the totals here.
+    # The identity below uses EX_oil_ + EX_non_oil_ directly and is unaffected; this keeps the
+    # reported/plotted EX_ and ex_ series consistent with it.
+    v.EX_[t] = v.EX_oil_[t] + v.EX_non_oil_[t]
+    v.ex_[t] = v.EX_[t] / v.p_[t]
+
     # Nominal Y
     v.Y_[t] = (pc.dC * v.C[t] + pc.dG * v.GY[t] + v.I_demand_[t] +
                v.EX_oil_[t] + v.EX_non_oil_[t] - v.IM_[t])
@@ -971,6 +984,25 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
     # 12. Flow-flow and stock-flow accounting
     ######################################################################################################################################################################################################################
     ######################################################################################################################################################################################################################
+    # The GDP identity is re-enforced at endogenize_input_output_matrix_A books industrial policy ONCE, to imports, 
+    # and derives Y_ from the identity before solving X_. The check below verifies that before stock-flow accounting begins.
+    Check_GDP_Identity_1 = True
+    if Check_GDP_Identity_1:
+            v.Y_C_[t]  = pc.dC * v.C[t]
+            v.Y_G_[t]  = pc.dG * v.GY[t]
+            v.Y_I_[t]  = v.I_demand_[t]
+            v.Y_EX_[t] = v.EX_oil_[t] + v.EX_non_oil_[t]
+            v.Y_IM_[t] = v.IM_[t]
+
+            v.GDP_identity_residual_[t] = v.Y_[t] - (
+                v.Y_C_[t] + v.Y_G_[t] + v.Y_I_[t] + v.Y_EX_[t] - v.Y_IM_[t])
+            v.GDP_identity_residual[t] = np.sum(v.GDP_identity_residual_[t])
+
+            _rel_residual = abs(v.GDP_identity_residual[t]) / abs(np.sum(v.Y_[t])) if np.sum(v.Y_[t]) != 0 else 0.0
+            if _rel_residual > 1e-9:
+                print(f"GDP CHECK 1: identity broken at time {t}: "
+                    f"Y_ - (C + G + I + EX - IM) = {v.GDP_identity_residual[t]:,.2f} "
+                    f"({_rel_residual * 100:.6f}% of GDP)")
 
     ######################################################################################################################################################################################################################
     # 12.1 Nominal-real conversions, GDP components, growth rates
@@ -1046,7 +1078,9 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
     # Real investment total
     # Investment total is recomputed here for consistency across all sectoral flows.
     # Use ownership total consistently; see also the first assignment above.
-    v.I_total[t] = np.sum(v.I_[t])
+    # v.I_total[t] = np.sum(v.I_[t])
+    # TODO: Try alternative formulation with I_demand_[t]
+    v.I_total[t] = np.sum(v.I_demand_[t])
     v.i_total[t] = v.I_total[t] / v.deflator_gdp[t]
 
     # Real imports calculation after supply-demand restrictions AND endogenous import reductions
@@ -1423,11 +1457,24 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
     ########################################################################################################################################################################################################################
     water_accounting(v, p, pc, t, verbose)
 
-    ########################################################################################################################################################################################################################
-    # 13.2 Irrigation costs (investment, O&M, subsidy)
-    ########################################################################################################################################################################################################################
-    apply_irrigation_costs(v, pc, t)
 
+    # Final GDP identity check of the timestep. Nothing between CHECK 1 and here writes a demand
+    # component, so this must agree with CHECK 1.
+    v.Y_C_[t]  = pc.dC * v.C[t]
+    v.Y_G_[t]  = pc.dG * v.GY[t]
+    v.Y_I_[t]  = v.I_demand_[t]
+    v.Y_EX_[t] = v.EX_oil_[t] + v.EX_non_oil_[t]
+    v.Y_IM_[t] = v.IM_[t]
+
+    v.GDP_identity_residual_[t] = v.Y_[t] - (
+        v.Y_C_[t] + v.Y_G_[t] + v.Y_I_[t] + v.Y_EX_[t] - v.Y_IM_[t])
+    v.GDP_identity_residual[t] = np.sum(v.GDP_identity_residual_[t])
+
+    _rel_residual = abs(v.GDP_identity_residual[t]) / abs(np.sum(v.Y_[t])) if np.sum(v.Y_[t]) != 0 else 0.0
+    if _rel_residual > 1e-9:
+        print(f"GDP CHECK 2: GDP identity broken at time {t}: "
+              f"Y_ - (C + G + I + EX - IM) = {v.GDP_identity_residual[t]:,.2f} "
+              f"({_rel_residual * 100:.6f}% of GDP)")
 
 
 ############################################################################################################################################################################################################################

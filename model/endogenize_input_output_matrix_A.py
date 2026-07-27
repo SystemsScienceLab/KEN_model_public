@@ -55,12 +55,17 @@ def endogenize_input_output_matrix_A(v: ModelVariables, p: ModelParameters, pc: 
     # Simplified assumption now: investment growth is in line with the increased production growth rates of the vision 2030 direct and int. input supply sectors
     # Note: Vision 2030 sector growth is applied within the specified policy horizon (vision_2030_timing).
     # For extended scenarios, the extended_vision_2030_timing parameter governs the additional period.
-    if p.Vision_2030_activity_increase and 1 <= t <= p.vision_2030_timing or 1 <= t <= p.extended_vision_2030_timing: 
-        v.Y_[t][pc.vision2030_sectors] = v.Y_[t][pc.vision2030_sectors] * (1 + pc.sectoral_yearly_growth_rates_V2030_[pc.vision2030_sectors])  # Increase domestic production by the amount of vision 2030 induced growth
+    if p.Vision_2030_activity_increase and (1 <= t <= max(p.vision_2030_timing, p.extended_vision_2030_timing)):
+        # Domestic production increase targeted by Vision 2030 in the directly affected sectors.
+        # Y_ is NOT written here: it follows from the expenditure identity once imports are reduced.
         vision_2030_sectors_import_decrease = v.Y_[t][pc.vision2030_sectors] *  pc.sectoral_yearly_growth_rates_V2030_[pc.vision2030_sectors]
         # ASSUME INDUSTRIAL POLICY here, i.e. that all increases in Vision 2030 targets are supplied by increasing domestic production
-        if p.Endogenous_excess_import_reduction: # Here, the increased production is mirrored by a reduction in imports with an exogenous parameter
-            v.IM_[t][pc.vision2030_sectors] = v.IM_[t][pc.vision2030_sectors]  -  vision_2030_sectors_import_decrease * p.import_excess_adjustment  # Reduce imports by the same amount
+        if p.Endogenous_excess_import_reduction: # Here, the increased production is mirrored one-for-one by a reduction in imports
+            # Imports cannot fall below zero: what cannot be substituted is forgone, not booked as GDP
+            _sub_ = np.minimum(vision_2030_sectors_import_decrease,
+                               np.maximum(v.IM_[t][pc.vision2030_sectors], 0.0))
+            v.IM_[t][pc.vision2030_sectors] = v.IM_[t][pc.vision2030_sectors] - _sub_
+            v.IM_substitution_forgone[t] += np.sum(vision_2030_sectors_import_decrease - _sub_)
             v.gI_endog_[t][pc.vision2030_sectors] = v.gI_endog_[t][pc.vision2030_sectors] + pc.sectoral_yearly_growth_rates_V2030_[pc.vision2030_sectors]  * p.import_reduction_investment_effectivity_factor
     ###################################################################################################################################################################################################################################################################################################            
 
@@ -69,8 +74,8 @@ def endogenize_input_output_matrix_A(v: ModelVariables, p: ModelParameters, pc: 
 
     # VISION 2030 induced GROWTH STEP 2.: Calculate the amount of increase in INDIRECT activity of the vision 2030 sectors through their intermediate input suppliers, and reduce part of the imports of these supplying sectors accordingly
     ###################################################################################################################################################################################################################################################################################################
-    if p.Endogenous_import_reduction_cluster_growth: 
-          if 1 <= t <= p.vision_2030_timing or 1 <= t <= p.extended_vision_2030_timing: 
+    if p.Endogenous_import_reduction_cluster_growth:
+          if 1 <= t <= max(p.vision_2030_timing, p.extended_vision_2030_timing):
             # Define Vision 2030 sectors columns
             v2030_cols = pc.vision2030_sectors
             
@@ -87,12 +92,16 @@ def endogenize_input_output_matrix_A(v: ModelVariables, p: ModelParameters, pc: 
             # inputs provided to the Vision 2030 sectors (columns)
             v2030_increase_by_supplier_total_ = np.sum(v2030_increase_by_supplier__, axis=1)  # Shape: (86,)
 
-            # Increase domestic production by the amount of increased intermediate input supply needs from other sectors to the vision 2030 sectors, scaled with an exogenous factor
-            v.Y_[t] = v.Y_[t] + v2030_increase_by_supplier_total_ * p.cluster_growth_effectivity_factor 
+            # Domestic production increase needed from the suppliers to the Vision 2030 sectors, scaled with an exogenous factor.
+            # Y_ is NOT written here: it follows from the expenditure identity once imports are reduced.
 
             # Option: Decrease imports accordingly as production of suppliers to the Vision 2030 sectors increases
-            if p.Endogenous_excess_import_reduction: # Here, the increased production is mirrored by a reduction in imports
-                v.IM_[t] = v.IM_[t]  -  v2030_increase_by_supplier_total_ * p.import_excess_adjustment  * p.cluster_growth_effectivity_factor # Reduce imports by the same amount
+            if p.Endogenous_excess_import_reduction: # Here, the increased production is mirrored one-for-one by a reduction in imports
+                _intent_ = v2030_increase_by_supplier_total_ * p.cluster_growth_effectivity_factor
+                # Imports cannot fall below zero: what cannot be substituted is forgone, not booked as GDP
+                _sub_ = np.minimum(_intent_, np.maximum(v.IM_[t], 0.0))
+                v.IM_[t] = v.IM_[t] - _sub_
+                v.IM_substitution_forgone[t] += np.sum(_intent_ - _sub_)
                 v.gI_endog_[t] = v.gI_endog_[t]  + pc.sectoral_yearly_growth_rates_V2030_ * p.import_reduction_investment_effectivity_factor
                       
 
@@ -106,11 +115,21 @@ def endogenize_input_output_matrix_A(v: ModelVariables, p: ModelParameters, pc: 
         for sector in import_dependency_rank_:
             # This is a simple fall-back option of domestic production increase based on excess imports only, which mirrors a simplified version of directed industrial policy
             import_reducing_domestic_increase = np.maximum(v.excess_import_[t][sector] * p.import_excess_adjustment * (v.IM_[t][sector] - v.Y_[t][sector]),0)
-            # HERE sectors are forced to grow TO REDUCE imports
-            v.Y_[t][sector] = np.nan_to_num(v.Y_[t][sector] + import_reducing_domestic_increase)  # Increase domestic production by the excess import adjustment
-            v.IM_[t][sector] = np.nan_to_num(v.IM_[t][sector] - import_reducing_domestic_increase)  # Reduce imports by the same amount
+            # HERE sectors are forced to grow TO REDUCE imports.
+            # Y_ is NOT written here: it follows from the expenditure identity once imports are reduced.
+            # Imports cannot fall below zero: what cannot be substituted is forgone, not booked as GDP
+            _sub_ = np.minimum(import_reducing_domestic_increase, np.maximum(v.IM_[t][sector], 0.0))
+            v.IM_[t][sector] = np.nan_to_num(v.IM_[t][sector] - _sub_)  # Reduce imports by the substituted amount
+            v.IM_substitution_forgone[t] += np.nan_to_num(import_reducing_domestic_increase - _sub_)
             v.gI_endog_[t][sector] = v.gI_endog_[t][sector] * (1 + v.excess_import_[t][sector] * p.import_excess_adjustment) * p.import_reduction_investment_effectivity_factor
     ###################################################################################################################################################################################################################################################################################################
+
+    ###################################################################################################################################################################################################################################################################################################
+    # GDP follows from the expenditure identity. Import substitution is booked ONCE, to imports;
+    # GDP then rises by exactly the amount by which imports were reduced. 
+    ###################################################################################################################################################################################################################################################################################################
+    v.Y_[t] = (pc.dC * v.C[t] + pc.dG * v.GY[t] + v.I_demand_[t]
+               + v.EX_oil_[t] + v.EX_non_oil_[t] - v.IM_[t])
 
     ###################################################################################################################################################################################################################################################################################################
     # Now calculate total Output X with the updated A matrix, and re-recalculate all other variables

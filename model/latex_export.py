@@ -369,7 +369,8 @@ def export_detailed_growth_rates_to_latex(
         'EX':       'Exports (EX)',
         'IM':       'Imports (IM)',
         'P':        'Profits (P)',
-        'Gov_exp':  'Gov. expenditures',
+        'Gov_exp':  'Total gov. expenditures',
+        'GY':       'Gov. consumption (GDP component)',
         'YD_wage':  'Disposable wage income (YD wage)',
     }
 
