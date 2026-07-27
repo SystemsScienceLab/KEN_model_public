@@ -2,13 +2,13 @@
 ## Public releases of the KAUST Economy-Nature (KEN) model, developed and maintained at the KAUST Systems Science Lab
 
 ## Remarks on current version 1.1
-This version of the KEN model (version 1.1) is a slightly updated version as compared to the KEN model description and first preprint version 1, which is forthcoming on SSRN:
+This version of the KEN model (version 1.1) is a slightly updated version as compared to the KEN model description and first preprint version 1.0, which is forthcoming on SSRN:
 “Transformation dynamics of an energy-rich and water-scarce economy in the Middle East”.
 
 Modifications for KEN version 1.1:
-1. Slight consistency issues corrected in the import section of the endogenous industrial policy module endogenize_input_output_matrix_A.py (difference in new calculation of imports is less than 0.2% of GDP with previous version, according small changes in GDP)
-2. GDP identity additionally enforced and checked at several points in model.py files
-3. Small flow effects have large stock effects: small changes in imports cause noticeable movements in government external assets (SAMA + PIF) and thus government net wealth through compound effects (interest on Saudi sovereign wealth fund) due to the improving trade balance. This demonstrates the sensitivity of the model w.r.t. trade and other factors closing the model.
+1. Slight consistency issues corrected in the import section of the endogenous industrial policy module endogenize_input_output_matrix_A.py: the difference in new calculation of imports is less than 0.2% of GDP as compared with previous version, accordingly there are small changes in GDP.
+2. GDP identity additionally enforced and checked at several points in model.py file to further ensure consistency and error recognition.
+3. Small flow effects have large stock effects: small changes in imports in Version 1.1 cause noticeable movements in government external assets (SAMA + PIF) and thus government net wealth through compound effects (interest on Saudi sovereign wealth fund) due to the improving trade balance, as compared to the last version. This demonstrates the sensitivity of the model w.r.t. trade and other factors closing the model.
 4. GDP identity figure added in run_model_COMPARE_scenarios.ipynb to clarify the composition of GDP in % for the different scenarios.
 
 ## Content:
