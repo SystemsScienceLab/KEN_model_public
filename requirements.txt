@@ -1,5 +1,28 @@
-jupyterlab
-matplotlib
-pandas
+# Python >= 3.12
+
+# Core numerics / data
 numpy
+pandas
 scipy
+
+# Plotting
+matplotlib
+seaborn
+plotly
+
+# Time series / statistics
+statsmodels
+ruptures
+
+# I/O
+openpyxl
+requests
+
+# Notebook environment
+jupyterlab
+ipykernel
+ipython
+nbformat
+
+# Formatting (matches .vscode/settings.json format-on-save)
+autopep8
