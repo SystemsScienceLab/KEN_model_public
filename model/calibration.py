@@ -2162,11 +2162,16 @@ class ParametersCalibrated:
         end_sim_year = 2065   # Max year in water module
         
         try:
-            # get_agr_data returns dicts {Year: Value}
-             # Modified signature in water_module.py to just take scenario_name
-            crop_X_dict, agr_intensity_dict, agr_irrigation_invest_dict, agr_irrigation_om_dict, agr_irrigation_subsidy_dict = get_agr_data(water_scenario, verbose=verbose)
-            
+            # get_agr_data returns dicts {Year: Value}, plus the derived 2021 crop share.
+            # Pass in the 2021 IOT total output for the combined agriculture sector so the
+            # crop/livestock split is derived from actual base-year data instead of a
+            # hardcoded ratio, and reconciles exactly with the IOT in 2021.
+            (crop_X_dict, agr_intensity_dict, agr_irrigation_invest_dict, agr_irrigation_om_dict,
+             agr_irrigation_subsidy_dict, crop_share_2021) = get_agr_data(
+                water_scenario, verbose=verbose, total_output_2021_iot=self.X_[self.agr_sector])
+
             self.crop_X_dict = crop_X_dict
+            self.crop_share_2021 = crop_share_2021
             self.agr_water_use_intensity_dict = agr_intensity_dict
             self.agr_irrigation_invest_dict = agr_irrigation_invest_dict
             self.agr_irrigation_om_dict = agr_irrigation_om_dict
@@ -2186,9 +2191,11 @@ class ParametersCalibrated:
             for i in range(max_t):
                 y = start_sim_year + i
                 self.crop_X[i] = crop_X_dict.get(y, 0.0)
-                # Calculate AGR_X: Total Output = Crop Output / 0.34
-                if self.crop_X[i] > 0:
-                    self.AGR_X[i] = self.crop_X[i] / 0.34
+                # AGR_X: Total Output = Crop Output / crop_share_2021, where crop_share_2021
+                # is the crop share of the combined sector's 2021 IOT total output (held
+                # fixed for all years — see get_agr_data).
+                if self.crop_X[i] > 0 and crop_share_2021 > 0:
+                    self.AGR_X[i] = self.crop_X[i] / crop_share_2021
                 else:
                     self.AGR_X[i] = 0.0
                 self.agr_water_use_intensity[i] = agr_intensity_dict.get(y, 0.0)
@@ -2200,6 +2207,7 @@ class ParametersCalibrated:
             print(f"Error calling water module: {e}")
             # Initialize with zeros to avoid crashes if files are missing
             self.AGR_X = np.zeros(100)
+            self.crop_share_2021 = 0.0
             self.agr_water_use_intensity = np.zeros(100)
             self.agr_irrigation_invest = np.zeros(100)
             self.agr_irrigation_om = np.zeros(100)

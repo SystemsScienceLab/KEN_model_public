@@ -61,16 +61,19 @@ class WaterResultRunner(ExperimentRunner):
         
         # 2. Inject Agriculture Data (Demand & Intensity from water-crop module)
         w_sc_name = water_module_scenarios.get(scenario, "BAU")
-        crop_X_dict, agr_intensity_dict, agr_invest, agr_om, agr_subsidy = get_agr_data(
-            w_sc_name, 2021, 2060, 
-            population_growth_rate=parameters.wage_population_growth_adjustment
+        crop_X_dict, agr_intensity_dict, agr_invest, agr_om, agr_subsidy, crop_share_2021 = get_agr_data(
+            w_sc_name, 2021, 2060,
+            population_growth_rate=parameters.wage_population_growth_adjustment,
+            total_output_2021_iot=pc.X_[pc.agr_sector]
         )
-        
+
         # Ensure data is formatted as arrays for the simulation
         max_t = 41 # 2021 to 2060 inclusive
         pc.crop_X = np.array([crop_X_dict.get(2021 + i, 0.0) for i in range(max_t)])
-        # Also need to set AGR_X as it is now required by replace_agr_X
-        pc.AGR_X = np.array([crop_X_dict.get(2021 + i, 0.0) / 0.34 if crop_X_dict.get(2021 + i, 0.0) > 0 else 0.0 for i in range(max_t)])
+        # Also need to set AGR_X as it is now required by replace_agr_X. crop_share_2021 is
+        # derived from the 2021 IOT (see get_agr_data), not a hardcoded ratio.
+        pc.crop_share_2021 = crop_share_2021
+        pc.AGR_X = np.array([crop_X_dict.get(2021 + i, 0.0) / crop_share_2021 if crop_X_dict.get(2021 + i, 0.0) > 0 and crop_share_2021 > 0 else 0.0 for i in range(max_t)])
         
         pc.agr_water_use_intensity = np.array([agr_intensity_dict.get(2021 + i, 0.0) for i in range(max_t)])
 

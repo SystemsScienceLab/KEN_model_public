@@ -457,11 +457,21 @@ def run_scenario(scenario_name, start_year, end_year,
         print("Done.\n")
     return df_result
 
-def get_agr_data(scenario_name, start_year=2021, end_year=2065, population_growth_rate=0.0113, verbose=False):
+def get_agr_data(scenario_name, start_year=2021, end_year=2065, population_growth_rate=0.0113, verbose=False,
+                  total_output_2021_iot=None):
     """
-    Runs the water module for the specified scenario and returns aggregated time series 
+    Runs the water module for the specified scenario and returns aggregated time series
     for Total Output (agr_X) and Water Use Intensity (agr_water_use_intensity).
-    
+
+    Args:
+        total_output_2021_iot (float): 2021 total output (1000 SAR) of the combined
+            "Crop and animal production, hunting and related service activities" sector,
+            taken from the base-year IO table (e.g. pc.X_[pc.agr_sector]). Crop's share of
+            this total in 2021 is derived from it, and
+            that share is held fixed to split crop/livestock output and water use for all
+            years. Required so the 2021 crop+livestock split reconciles exactly with the
+            IOT's combined-sector total output.
+
     Returns:
         crop_X (dict): {Year: Total_Output_1000SAR}
         agr_water_use_intensity (dict): {Year: Water_Use_Intensity_m3_per_1000SAR}
@@ -502,11 +512,21 @@ def get_agr_data(scenario_name, start_year=2021, end_year=2065, population_growt
     # Get 2021 Crop Values
     crop_water_2021 = crop_water_dict.get(2021, 0.0)
     crop_output_2021 = crop_X_dict.get(2021, 0.0)
-    
+
+    if total_output_2021_iot is None or total_output_2021_iot <= 0:
+        raise ValueError(
+            "get_agr_data requires total_output_2021_iot (the 2021 IOT total output, "
+            "1000 SAR, for the combined 'Crop and animal production...' sector) to "
+            "derive the crop/livestock split — pass pc.X_[pc.agr_sector]."
+        )
+
     # Calculate 2021 Livestock Values
-    # Livestock Output = Crop Output / 0.34 * (1 - 0.34) = Crop Output / 0.34 * 0.66
-    # Or simply: Total Output = Crop / 0.34 -> Livestock = Total - Crop
-    total_output_2021 = crop_output_2021 / 0.34 if crop_output_2021 > 0 else 0
+    # Crop's share of the combined sector's 2021 total output, derived from the base-year
+    # IO table (instead of a hardcoded literal), so the crop+livestock split reconciles
+    # exactly with the IOT's combined-sector total output in 2021. This share is then held
+    # fixed for all years (see loop below).
+    crop_share_2021 = crop_output_2021 / total_output_2021_iot if crop_output_2021 > 0 else 0.0
+    total_output_2021 = total_output_2021_iot
     livestock_output_2021 = total_output_2021 - crop_output_2021
     
     livestock_water_2021 = TOTAL_AGR_WATER_2021 - crop_water_2021
@@ -528,8 +548,8 @@ def get_agr_data(scenario_name, start_year=2021, end_year=2065, population_growt
     for year, crop_output in crop_X_dict.items():
         crop_water = crop_water_dict.get(year, 0.0)
         
-        # Calculate derived Livestock values for this year
-        total_output = crop_output / 0.34 if crop_output > 0 else 0
+        # Calculate derived Livestock values for this year, using the fixed 2021 crop share
+        total_output = crop_output / crop_share_2021 if crop_output > 0 and crop_share_2021 > 0 else 0
         livestock_output = total_output - crop_output
         
         # Livestock Water = Output * Fixed Intensity
@@ -549,7 +569,8 @@ def get_agr_data(scenario_name, start_year=2021, end_year=2065, population_growt
     agr_irrigation_om = summary_sector["OM_Cost_SAR"].to_dict()
     agr_irrigation_subsidy = summary_sector["Subsidy_SAR"].to_dict()
     
-    return crop_X_dict, agr_water_use_intensity, agr_irrigation_invest, agr_irrigation_om, agr_irrigation_subsidy
+    return (crop_X_dict, agr_water_use_intensity, agr_irrigation_invest, agr_irrigation_om,
+            agr_irrigation_subsidy, crop_share_2021)
 
 if __name__ == "__main__":
     
@@ -844,12 +865,33 @@ def water_accounting(v: "ModelVariables", p: "ModelParameters", pc: "ParametersC
 # ==========================================
 def replace_agr_X(v: "ModelVariables", pc: "ParametersCalibrated", t: int):
     """
-    Replace the original X of agriculture sector with the agr_X (from water-crop model).
-    AND ensure global consistency by recalculating Intermediate Sales and balancing Imports for ALL sectors.
+    Replace the original X of agriculture sector with the agr_X (from water-crop model),
+    then re-balance the demand-side identity X = IntS + Y for that sector so that it stays
+    consistent with the cost-side identity X = IntP + GVA (which holds automatically,
+    since IntP_/GVA are always derived from X_ via the A matrix elsewhere in model.py).
+
+    Without this, overriding X_[agr] alone leaves Y_[agr] (computed independently from the
+    expenditure side: C + G + I + EX - IM) unreconciled with the new X_[agr], breaking
+    X = IntS + Y for the agriculture sector.
     """
     # 1. Update X for agriculture sector
     # Use the pre-calculated Total Agriculture Output (AGR_X) from calibration
     v.X_[t][pc.agr_sector] = pc.AGR_X[t-1]
+
+    # 2. Re-derive Intermediate Sales for ALL sectors from the updated X_ (agr's new
+    # output level changes how much it buys as inputs from other sectors, which flows
+    # through the A matrix into IntS_ for those input-supplying sectors too).
+    v.IntS_[t] = np.dot(v.A__[t], v.X_[t])
+
+    # 3. Force agriculture Y_ to the residual so X_[agr] = IntS_[agr] + Y_[agr] holds.
+    agr_Y_old = v.Y_[t][pc.agr_sector]
+    agr_Y_new = v.X_[t][pc.agr_sector] - v.IntS_[t][pc.agr_sector]
+    v.Y_[t][pc.agr_sector] = agr_Y_new
+
+    # 4. Absorb the resulting gap through imports: C/G/I/EX demand for agr goods is left
+    # untouched, and whatever domestic output can no longer cover (or now exceeds) is
+    # made up for by imports, so Y_[agr] = C+G+I+EX-IM_[agr] still holds afterwards.
+    v.IM_[t][pc.agr_sector] -= (agr_Y_new - agr_Y_old)
 
 
 def apply_irrigation_costs(v, pc, t):
