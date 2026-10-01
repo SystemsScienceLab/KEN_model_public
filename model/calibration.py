@@ -911,6 +911,8 @@ class ParametersCalibrated:
         ########################################################################
         # 5.4 Emission intensities
         ########################################################################
+        # Legacy: these CSV-derived *_emission_intensities_ are not used downstream, and the raw
+        # CSV header's oil factor (66.3 MtCO2/EJ) is outdated. Emissions use the IPCC factors in 5.5.
         try:
             # Load emission intensity data, assuming standard comma delimiter.
             # The sector names in the first column will be used to align the data.
@@ -964,7 +966,9 @@ class ParametersCalibrated:
 
         # 4. Define Emission Factors (replacing the old intensity-based method)
         # Using standard factors. Units: MtCO2 / GJ
-        # Source: IPCC 2006 Guidelines for National Greenhouse Gas Inventories
+        # Source: IPCC 2006 Guidelines for National Greenhouse Gas Inventories, Vol. 2, Table 1.4
+        # (unchanged in the 2019 Refinement, Vol. 2, Ch. 1, Sec. 1.4: "No refinement").
+        # 95% CI: crude oil 71,100-75,500 kg/TJ; natural gas 54,300-58,300 kg/TJ.
         kg_per_tonne = 1000
         TJ_per_GJ = 1/1000
         Mt_per_kt = 1/1000
