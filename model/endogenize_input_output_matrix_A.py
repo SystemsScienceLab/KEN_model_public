@@ -136,7 +136,7 @@ def endogenize_input_output_matrix_A(v: ModelVariables, p: ModelParameters, pc: 
     ###################################################################################################################################################################################################################################################################################################
     # Calculate total output X based on A matrix and all final demand components
     v.X_[t] = np.dot(np.linalg.inv(pc.I - v.A__[t]), v.Y_[t])
-    replace_agr_X(v, pc, t)
+    replace_agr_X(v, pc, t, p)
     # Re-create Z matrix from last period to have a direct representation of IO Shares
     v.Z__[t] = v.A__[t]  @ np.diag(v.X_[t])
     # This is the same as the Z matrix

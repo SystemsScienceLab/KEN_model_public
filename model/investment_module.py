@@ -56,8 +56,11 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
 
         # 2. Desalination Investment
         # Step A: Determine Base Investment
-        if v.I_[t-1][pc.sector_desal] > 0:
-            base_desal = v.I_[t-1][pc.sector_desal]
+        # The base is last period's own capacity investment (I_desal_cap), NOT v.I_[t-1], which also
+        # contains add-ons (energy efficiency etc., added in section 4). After a zero-investment year
+        # those tiny add-ons would otherwise become the base and investment would never recover.
+        if v.I_desal_cap[t-1] > 0:
+            base_desal = v.I_desal_cap[t-1]
         else: # if no investment in previous year, calculate based on depreciation
             base_desal = pc.δ_desal * v.K_[t-1][pc.sector_desal]
             
@@ -72,8 +75,8 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
 
         # 3. Wastewater Investment
         # Step A: Determine Base Investment
-        if v.I_[t-1][pc.sector_wwater] > 0:
-             base_wwater = v.I_[t-1][pc.sector_wwater]
+        if v.I_wwater_cap[t-1] > 0:
+             base_wwater = v.I_wwater_cap[t-1]
         else: # if no investment in previous year, calculate based on depreciation
              base_wwater = pc.δ_wwater * v.K_[t-1][pc.sector_wwater]
             
@@ -84,7 +87,27 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
             # Maturity Phase: Grow with the economy (Endogenous rate, typically 2-4%)
             # Same logic as desalination: Stabilize growth after 2030 unless gaps exist.
             v.I_[t][pc.sector_wwater] = base_wwater * (1 + v.gI_trend_endog[t])
-    
+
+    # 2.1 Requirement-based floor once groundwater has been phased out. From then on, desalination
+    # and reuse must supply all water demand, so their capital stock has to follow it: investment
+    # in t (capacity available in t+1, see K_ accumulation in model.py) covers the capacity
+    # required by expected demand in t+1. Before the phase-out, groundwater remains the residual.
+    if t > 2 and v.water_gw_phased_out[t-1] > 0:
+        _d1, _d2 = v.water_use_total_national[t-1], v.water_use_total_national[t-2]
+        _growth = _d1 / _d2 if _d2 > 0 else 1.0
+        expected_demand = _d1 * _growth ** 2
+        _pot = v.pot_desal[t-1] + v.pot_wwater[t-1]
+        _share_desal = v.pot_desal[t-1] / _pot if _pot > 0 else 0.5
+        for _s, _share, _p_m3, _eK, _u in (
+                (pc.sector_desal, _share_desal, pc.p_desal_m3, pc.eK_desal, pc.u_desal),
+                (pc.sector_wwater, 1 - _share_desal, pc.p_wwater_m3, pc.eK_wwater, pc.u_wwater)):
+            K_required = expected_demand * _share * _p_m3 / (_eK * _u)
+            K_next_without_I = (v.K_[t-1][_s] * (1 - pc.δ_[_s]) + v.I_[t-1][_s]) * (1 - pc.δ_[_s])
+            v.I_[t][_s] = max(v.I_[t][_s], K_required - K_next_without_I, 0.0)
+
+    # Own capacity investment of desalination and wastewater, before the add-ons of section 4
+    v.I_desal_cap[t] = v.I_[t][pc.sector_desal]
+    v.I_wwater_cap[t] = v.I_[t][pc.sector_wwater]
 
 
     ########################################################################################################################################################################################################################

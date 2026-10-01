@@ -217,7 +217,12 @@ def step2_calculate_production(df_consumption, df_ssr):
         
         # Get SSR (Forward Fill)
         ssr = get_value_with_fallback(year, crop, df_ssr)
-        
+        # Blank SSR cells (e.g. wheat after 2021 in the Vision 2030 and Transformation files)
+        # mean no domestic production. NaN rows were already dropped from the yearly sums, so
+        # this makes the treatment explicit without changing results.
+        if pd.isna(ssr):
+            ssr = 0.0
+
         prod = cons * ssr
         results.append({
             "Year": year,
@@ -458,7 +463,7 @@ def run_scenario(scenario_name, start_year, end_year,
     return df_result
 
 def get_agr_data(scenario_name, start_year=2021, end_year=2065, population_growth_rate=0.0113, verbose=False,
-                  total_output_2021_iot=None):
+                  total_output_2021_iot=None, return_details=False):
     """
     Runs the water module for the specified scenario and returns aggregated time series
     for Total Output (agr_X) and Water Use Intensity (agr_water_use_intensity).
@@ -471,6 +476,8 @@ def get_agr_data(scenario_name, start_year=2021, end_year=2065, population_growt
             that share is held fixed to split crop/livestock output and water use for all
             years. Required so the 2021 crop+livestock split reconciles exactly with the
             IOT's combined-sector total output.
+        return_details (bool): If True, a seventh element is returned: a dict with the series
+            needed for the agri-food value-chain coupling (see compute_agr_supply).
 
     Returns:
         crop_X (dict): {Year: Total_Output_1000SAR}
@@ -478,6 +485,12 @@ def get_agr_data(scenario_name, start_year=2021, end_year=2065, population_growt
         agr_irrigation_invest (dict): {Year: Investment_Cost_SAR}
         agr_irrigation_om (dict): {Year: OM_Cost_SAR}
         agr_irrigation_subsidy (dict): {Year: Subsidy_SAR}
+        crop_share_2021 (float): crop share of the combined sector's 2021 IOT total output
+        details (dict, only if return_details): {
+            "water_base": {Year: m3} total agricultural water (crops + residual),
+            "crop_nonfodder_intensity": {Year: m3 per 1000 SAR} of non-fodder crops,
+            "fodder_water_2021": m3, "residual_water_2021": m3,
+            "diet_factor": {Year: factor} per-capita consumption factor of the scenario}
     """
     if scenario_name not in SCENARIOS:
         print(f"Warning: Scenario '{scenario_name}' not found. Defaulting to BAU.")
@@ -539,7 +552,8 @@ def get_agr_data(scenario_name, start_year=2021, end_year=2065, population_growt
         
     # 3. Calculate Total Agr Water & Intensity for ALL years
     agr_water_use_intensity = {}
-    
+    agr_water_base = {}
+
     # Note: Total Agr Output = Crop + Livestock, but the returned `crop_X` is Crop Output only.
     # The return value `crop_X` is used in calibration.py to set `self.crop_X` and then derive `AGR_X`.
     # So `crop_X` MUST remain Crop Output.
@@ -557,7 +571,8 @@ def get_agr_data(scenario_name, start_year=2021, end_year=2065, population_growt
         
         # Total Agr Water
         total_agr_water = crop_water + livestock_water
-        
+        agr_water_base[year] = total_agr_water
+
         # Total Agr Intensity = Total Water / Total Output
         if total_output > 0:
             agr_water_use_intensity[year] = total_agr_water / total_output
@@ -568,9 +583,35 @@ def get_agr_data(scenario_name, start_year=2021, end_year=2065, population_growt
     agr_irrigation_invest = summary_sector["Investment_Cost_SAR"].to_dict()
     agr_irrigation_om = summary_sector["OM_Cost_SAR"].to_dict()
     agr_irrigation_subsidy = summary_sector["Subsidy_SAR"].to_dict()
-    
+
+    if not return_details:
+        return (crop_X_dict, agr_water_use_intensity, agr_irrigation_invest, agr_irrigation_om,
+                agr_irrigation_subsidy, crop_share_2021)
+
+    # Details for the agri-food value-chain coupling
+    is_fodder = df_result["Crop"].str.contains("fodder", case=False)
+    nonfodder = df_result[~is_fodder].groupby("Year")[["Withdrawal_m3", "Total_Output_1000SAR"]].sum()
+    crop_nonfodder_intensity = (
+        nonfodder["Withdrawal_m3"] / nonfodder["Total_Output_1000SAR"].where(nonfodder["Total_Output_1000SAR"] > 0)
+    ).fillna(0.0).to_dict()
+    fodder_water_2021 = df_result[is_fodder & (df_result["Year"] == 2021)]["Withdrawal_m3"].sum()
+    # Same per-capita consumption factor as step1_calculate_consumption
+    is_sust = (scenario_name == "Transformation")
+    diet_factor = {}
+    for year in crop_X_dict:
+        if is_sust:
+            diet_factor[year] = (1.0 - 0.25 * (year - 2021) / (2035 - 2021)) if year <= 2035 else 0.75
+        else:
+            diet_factor[year] = 1.0
+    details = {
+        "water_base": agr_water_base,
+        "crop_nonfodder_intensity": crop_nonfodder_intensity,
+        "fodder_water_2021": fodder_water_2021,
+        "residual_water_2021": livestock_water_2021,
+        "diet_factor": diet_factor,
+    }
     return (crop_X_dict, agr_water_use_intensity, agr_irrigation_invest, agr_irrigation_om,
-            agr_irrigation_subsidy, crop_share_2021)
+            agr_irrigation_subsidy, crop_share_2021, details)
 
 if __name__ == "__main__":
     
@@ -630,7 +671,12 @@ def calculate_water_demand(v, p, pc, t):
     # 1. Update Water Intensities
     v.water_use_intensities_[t] = pc.water_use_intensities_.copy()
     v.water_use_intensities_[t][pc.agr_sector] = pc.agr_water_use_intensity[t-1]
-    
+    # With the agri-food value-chain coupling, agricultural water is computed in physical terms in
+    # compute_agr_supply (existing path + water of the value-chain increment); convert it back to an
+    # intensity on the current agricultural output so that the rest of the module is unchanged.
+    if getattr(p, "agr_valuechain_coupling", False) and v.X_[t][pc.agr_sector] > 0 and v.agr_water_total[t] > 0:
+        v.water_use_intensities_[t][pc.agr_sector] = v.agr_water_total[t] / v.X_[t][pc.agr_sector]
+
     # FIX: Zero out other agricultural sectors (Forestry & Fishing) to prevent double counting
     # The calibrated total water (10.8 b) is assigned to pc.agr_sector (0).
     # Summing indices 0-3 (Crop, Forestry, Fishing) would otherwise exceed the target.
@@ -654,10 +700,13 @@ def calculate_water_demand(v, p, pc, t):
     
     return v.water_use_sectoral_[t]
 
-def calculate_aggregate_supply_mix(v, pc, t):
+def calculate_aggregate_supply_mix(v, pc, t, p=None):
     """
     Step 3: Calculate aggregate Desalination, Wastewater, and Groundwater totals.
     Handles capacity constraints and the 'zero groundwater' policy.
+    After the groundwater phase-out, desalination and reuse deliveries are bounded by their
+    capacity (potential times 1 + p.water_supply_capacity_headroom); a remaining shortfall is
+    recorded in v.water_supply_gap and met by (renewed) groundwater abstraction.
     """
     import numpy as np
     
@@ -677,9 +726,10 @@ def calculate_aggregate_supply_mix(v, pc, t):
     # Groundwater as residual
     v.water_use_gw_tot[t] = np.maximum(v.water_use_total_national[t] - v.water_use_desal_tot[t] - v.water_use_wwater_tot[t], 0)
 
-    # Constraint: Once groundwater supply becomes 0, it stays 0
+    # Constraint: Once groundwater supply becomes 0, it stays 0 (persistent phase-out flag)
     if t > 1:
-        if v.water_use_gw_tot[t-1] <= 0.1:
+        if v.water_use_gw_tot[t-1] <= 0.1 or v.water_gw_phased_out[t-1] > 0:
+            v.water_gw_phased_out[t] = 1
             v.water_use_gw_tot[t] = 0
             
             # Recalculate Desal and Wastewater to meet total demand
@@ -688,6 +738,28 @@ def calculate_aggregate_supply_mix(v, pc, t):
                 
             v.water_use_desal_tot[t] = v.water_use_total_national[t] * v.share_desal[t]
             v.water_use_wwater_tot[t] = v.water_use_total_national[t] * v.share_wwater[t]
+
+            # Deliveries cannot exceed installed capacity (plus a utilisation headroom): water
+            # without capital behind it would break the physical-monetary link (capital, IO cost).
+            if p is not None and hasattr(p, "water_supply_capacity_headroom"):
+                headroom = 1 + p.water_supply_capacity_headroom
+                cap_desal = v.pot_desal[t] * headroom
+                cap_wwater = v.pot_wwater[t] * headroom
+                v.water_use_desal_tot[t] = min(v.water_use_desal_tot[t], cap_desal)
+                v.water_use_wwater_tot[t] = min(v.water_use_wwater_tot[t], cap_wwater)
+                # Spare capacity of one source covers a shortfall of the other
+                shortfall = v.water_use_total_national[t] - v.water_use_desal_tot[t] - v.water_use_wwater_tot[t]
+                if shortfall > 0:
+                    extra = min(shortfall, cap_desal - v.water_use_desal_tot[t])
+                    v.water_use_desal_tot[t] += extra
+                    shortfall -= extra
+                    extra = min(shortfall, cap_wwater - v.water_use_wwater_tot[t])
+                    v.water_use_wwater_tot[t] += extra
+                    shortfall -= extra
+                v.water_supply_gap[t] = max(shortfall, 0.0)
+                if v.water_supply_gap[t] > 1e6:
+                    # Keeps the water balance closed; reported as a diagnostic
+                    v.water_use_gw_tot[t] = v.water_supply_gap[t]
 
 def get_current_allocation_shares(pc, t):
     """
@@ -763,7 +835,7 @@ def water_accounting(v: "ModelVariables", p: "ModelParameters", pc: "ParametersC
     water_use_sectoral = calculate_water_demand(v, p, pc, t)
     
     # 2. Calculate Aggregate Supply Mix (Fixes Column Totals)
-    calculate_aggregate_supply_mix(v, pc, t)
+    calculate_aggregate_supply_mix(v, pc, t, p)
     
     # 3. Prepare RAS Inputs
     # 3.1 Row Totals (Sectoral Demands)
@@ -861,9 +933,113 @@ def water_accounting(v: "ModelVariables", p: "ModelParameters", pc: "ParametersC
 
 
 # ==========================================
-# 6. Replace X of agriculture sector with the AGR_X
+# 6. Agricultural output: crops, non-crop output and the agri-food value chain
 # ==========================================
-def replace_agr_X(v: "ModelVariables", pc: "ParametersCalibrated", t: int):
+def agr_domestic_sourcing_share(p: "ModelParameters", t: int) -> float:
+    """
+    Domestic sourcing share (delta) of the value-chain increment in period t: a linear ramp
+    from agr_domestic_share_start in t=1 (2021) to agr_domestic_share_target in period
+    agr_domestic_share_target_year, constant afterwards.
+    """
+    start = p.agr_domestic_share_start
+    target = p.agr_domestic_share_target
+    t_target = max(int(p.agr_domestic_share_target_year), 1)
+    if t_target <= 1:
+        return target
+    return start + (target - start) * min(1.0, max(0.0, (t - 1) / (t_target - 1)))
+
+
+def compute_agr_supply(v: "ModelVariables", p: "ModelParameters", pc: "ParametersCalibrated", t: int) -> float:
+    """
+    Domestic agricultural gross output (nominal, 1000 SAR) and agricultural water use for period t.
+
+    Agricultural output has three components, all in 2021 prices:
+      1. Crops, from the bottom-up crop module (population x per-capita demand x SSR).
+      2. Non-crop output (mainly livestock, 83% of the sector in 2021), growing with population
+         and the scenario's diet factor. It is no longer tied to crop output, so a fodder phase-out
+         (feed imported) does not mechanically cut livestock output.
+      3. A value-chain increment: a domestic sourcing share delta of the intermediate demand of
+         all other sectors for agricultural goods (food processing, food services, accommodation,
+         ...) in excess of its population-driven path. The remainder is imported.
+
+    Water: the existing agricultural water path (crop withdrawal plus the calibrated residual,
+    scaled with crop output) is kept unchanged. The increment adds water at
+        w_inc = theta * I_crop_nonfodder(t) + (1 - theta) * (phi_live + f * I_feed),
+    i.e. its crop part follows the scenario's irrigation, greenhouse and crop mix, and its
+    livestock part needs direct water plus, if grown domestically, fodder. An optional ceiling on
+    agricultural water (agr_water_cap) truncates the increment; imports fill the gap.
+    """
+    k = t - 1  # index into the calibrated arrays, k = 0 is 2021
+    agr = pc.agr_sector
+
+    # 1. + 2. Crops and non-crop output (2021 prices)
+    x_crop = pc.crop_X[k]
+    x_live = pc.X_live_2021 * pc.agr_pop_factor[k] * pc.agr_diet_factor[k]
+
+    # 3. Value-chain demand: real intermediate demand of all other sectors for agricultural goods,
+    # from the current-period Leontief solution (own use excluded, so no simultaneity with X_agr)
+    a_row = v.A__[t][agr].copy()
+    a_row[agr] = 0.0
+    x_real = np.divide(v.X_[t], v.p_[t], out=np.zeros_like(v.X_[t]), where=v.p_[t] != 0)
+    D = float(np.dot(a_row, x_real))
+    # Population-driven reference path, anchored to the model's own 2021 (t=1) demand so that the
+    # increment is zero in 2021 and agricultural output and water match the base-year data
+    D_base = D if t == 1 else v.agr_D_valuechain[1]
+    D_ref = D_base * pc.agr_pop_factor[k]
+    delta = agr_domestic_sourcing_share(p, t)
+    increment = delta * max(0.0, D - D_ref)
+
+    # Water of the existing path and of the increment
+    water_base = pc.agr_water_base[k]
+    theta = p.agr_increment_crop_share
+    w_inc = (theta * pc.agr_crop_nonfodder_intensity[k]
+             + (1 - theta) * (p.agr_livestock_direct_water_intensity
+                              + p.agr_increment_feed_domestic * pc.agr_feed_water_intensity))
+    if p.agr_water_cap > 0 and w_inc > 0:
+        increment = min(increment, max(0.0, p.agr_water_cap - water_base) / w_inc)
+    water_inc = w_inc * increment
+
+    # Nominal output: crop-module values are in 2021 prices
+    price_index = 1.0
+    if p.agr_price_indexing and v.p_[0][agr] > 0:
+        price_index = v.p_[t][agr] / v.p_[0][agr]
+    x_agr_real = x_crop + x_live + increment
+
+    # Diagnostics (scalar ModelVariables)
+    v.agr_X_crop[t] = x_crop
+    v.agr_X_livestock[t] = x_live
+    v.agr_X_valuechain[t] = increment
+    v.agr_D_valuechain[t] = D
+    v.agr_domestic_share_delta[t] = delta
+    v.agr_water_valuechain[t] = water_inc
+    v.agr_water_total[t] = water_base + water_inc
+    v.agr_water_cap_slack[t] = (p.agr_water_cap - v.agr_water_total[t]) if p.agr_water_cap > 0 else 0.0
+
+    return x_agr_real * price_index
+
+
+def agr_diet_consumption_shares(pc: "ParametersCalibrated", t: int):
+    """
+    Household consumption shares with the scenario's diet / food-waste factor applied on the demand
+    side as well: the agricultural share is scaled by the same factor that the crop module applies
+    to per-capita food demand, and the freed budget shifts pro rata to all other consumption goods,
+    so total consumption is unchanged. Without this, the factor lowers domestic supply only and
+    shows up as additional imports.
+    """
+    if not hasattr(pc, "dC_base"):
+        pc.dC_base = pc.dC.copy()
+    dC = pc.dC_base.copy()
+    factor = pc.agr_diet_factor[min(t - 1, len(pc.agr_diet_factor) - 1)]
+    freed = dC[pc.agr_sector] * (1 - factor)
+    dC[pc.agr_sector] -= freed
+    others = dC.copy()
+    others[pc.agr_sector] = 0.0
+    if others.sum() > 0:
+        dC += freed * others / others.sum()
+    return dC
+
+
+def replace_agr_X(v: "ModelVariables", pc: "ParametersCalibrated", t: int, p: "ModelParameters" = None):
     """
     Replace the original X of agriculture sector with the agr_X (from water-crop model),
     then re-balance the demand-side identity X = IntS + Y for that sector so that it stays
@@ -873,10 +1049,16 @@ def replace_agr_X(v: "ModelVariables", pc: "ParametersCalibrated", t: int):
     Without this, overriding X_[agr] alone leaves Y_[agr] (computed independently from the
     expenditure side: C + G + I + EX - IM) unreconciled with the new X_[agr], breaking
     X = IntS + Y for the agriculture sector.
+
+    With p.agr_valuechain_coupling, agr_X comes from compute_agr_supply (crops, non-crop output
+    and the agri-food value-chain increment); otherwise from the crop module only (pc.AGR_X).
     """
     # 1. Update X for agriculture sector
-    # Use the pre-calculated Total Agriculture Output (AGR_X) from calibration
-    v.X_[t][pc.agr_sector] = pc.AGR_X[t-1]
+    if p is not None and getattr(p, "agr_valuechain_coupling", False):
+        v.X_[t][pc.agr_sector] = compute_agr_supply(v, p, pc, t)
+    else:
+        # Use the pre-calculated Total Agriculture Output (AGR_X) from calibration
+        v.X_[t][pc.agr_sector] = pc.AGR_X[t-1]
 
     # 2. Re-derive Intermediate Sales for ALL sectors from the updated X_ (agr's new
     # output level changes how much it buys as inputs from other sectors, which flows

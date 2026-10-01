@@ -2166,9 +2166,13 @@ class ParametersCalibrated:
             # Pass in the 2021 IOT total output for the combined agriculture sector so the
             # crop/livestock split is derived from actual base-year data instead of a
             # hardcoded ratio, and reconciles exactly with the IOT in 2021.
+            # Population growth is passed from the scenario parameters so that the crop module and
+            # the economic core use the same population path (0 in the steady-state validation run).
             (crop_X_dict, agr_intensity_dict, agr_irrigation_invest_dict, agr_irrigation_om_dict,
-             agr_irrigation_subsidy_dict, crop_share_2021) = get_agr_data(
-                water_scenario, verbose=verbose, total_output_2021_iot=self.X_[self.agr_sector])
+             agr_irrigation_subsidy_dict, crop_share_2021, agr_details) = get_agr_data(
+                water_scenario, verbose=verbose, total_output_2021_iot=self.X_[self.agr_sector],
+                population_growth_rate=parameters.wage_population_growth_adjustment,
+                return_details=True)
 
             self.crop_X_dict = crop_X_dict
             self.crop_share_2021 = crop_share_2021
@@ -2202,7 +2206,38 @@ class ParametersCalibrated:
                 self.agr_irrigation_invest[i] = agr_irrigation_invest_dict.get(y, 0.0)
                 self.agr_irrigation_om[i] = agr_irrigation_om_dict.get(y, 0.0)
                 self.agr_irrigation_subsidy[i] = agr_irrigation_subsidy_dict.get(y, 0.0)
-                
+
+            ####################################################################
+            # 8.2.1 Agri-food value-chain coupling (see water_module.compute_agr_supply)
+            ####################################################################
+            # Components of agricultural output in 2021 prices: crops (crop module), non-crop output
+            # (mainly livestock, 83% of the sector in 2021) growing with population and the diet
+            # factor, and a value-chain increment driven by intermediate demand of other sectors.
+            self.X_live_2021 = self.X_[self.agr_sector] - self.crop_X[0]
+            self.agr_pop_factor = np.array([(1 + parameters.wage_population_growth_adjustment) ** i
+                                            for i in range(max_t)])
+            self.agr_diet_factor = np.array([agr_details["diet_factor"].get(start_sim_year + i, 1.0)
+                                             for i in range(max_t)])
+            # Existing agricultural water path (crop withdrawal + residual scaled with crop output)
+            self.agr_water_base = np.array([agr_details["water_base"].get(start_sim_year + i, 0.0)
+                                            for i in range(max_t)])
+            # Water intensity of non-fodder crops (m3 per 1000 SAR), reflects the scenario's
+            # irrigation technology, greenhouse and crop mix
+            self.agr_crop_nonfodder_intensity = np.array(
+                [agr_details["crop_nonfodder_intensity"].get(start_sim_year + i, 0.0) for i in range(max_t)])
+            # Fodder water per unit of non-crop output in 2021 (m3 per 1000 SAR): water cost of
+            # feeding additional livestock with domestically grown fodder
+            self.agr_feed_water_intensity = (agr_details["fodder_water_2021"] / self.X_live_2021
+                                             if self.X_live_2021 > 0 else 0.0)
+            # Intermediate demand of all other sectors for agricultural goods in the IOT (own use
+            # excluded); diagnostic only, the model anchors the reference path to its own t=1 demand
+            _a_agr_row = self.A[self.agr_sector].copy()
+            _a_agr_row[self.agr_sector] = 0.0
+            self.D_agr_2021 = float(np.dot(_a_agr_row, self.X_))
+            # 2021 domestic supply share of agricultural goods, X / (X + IM)
+            self.agr_domestic_share_2021 = self.X_[self.agr_sector] / (
+                self.X_[self.agr_sector] + self.IM_[self.agr_sector])
+
         except Exception as e:
             print(f"Error calling water module: {e}")
             # Initialize with zeros to avoid crashes if files are missing
