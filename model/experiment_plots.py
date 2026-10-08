@@ -33,6 +33,21 @@ SCENARIO_LABELS = {
 # PRIVATE HELPERS - overlap resolution & GDP-share endpoint annotations
  # 
 
+def _truncate_reports(reports, last_year=2060):
+    """Cut all run reports to 2021..last_year (model period t = year - 2020), so that the
+    plots end in last_year and the end-of-period labels are the values of that year."""
+    t_last = last_year - 2020
+    truncated = {}
+    for scenario, runs in reports.items():
+        truncated[scenario] = []
+        for run_report in runs:
+            run_report = dict(run_report)
+            run_report["results_macro"] = run_report["results_macro"].loc[:t_last]
+            run_report["results_sectoral"] = {k: v.loc[:t_last] for k, v in run_report["results_sectoral"].items()}
+            truncated[scenario].append(run_report)
+    return truncated
+
+
 def _resolve_overlaps_pts(points, min_gap):
     """Nudge overlapping annotation y-positions upward to prevent collisions."""
     if not points:
@@ -219,7 +234,8 @@ def _plot_panel(ax, reports, variables, title, scenario_colors, ylabel="Trillion
                                  else None)
                     if _override is not False:
                         if isinstance(_override, tuple):
-                            _start_pct, _lbl_sfx = _override[0] * 100, _override[1]
+                            _ratio = mean_v[0] / Y_mean[0] if _override[0] is None else _override[0]
+                            _start_pct, _lbl_sfx = _ratio * 100, _override[1]
                         elif _override is not None:
                             _start_pct, _lbl_sfx = _override * 100, ''
                         else:
@@ -295,6 +311,7 @@ def plot_macro_comparison(reports):
     Solid line = first variable listed, dashed = second variable.
     All monetary values in Trillion SAR.
     """
+    reports = _truncate_reports(reports)
     scenario_colors = {
         "Baseline":        "#d62728",
         "Vision_2030":     "#ff7f0e",
@@ -307,9 +324,9 @@ def plot_macro_comparison(reports):
     fig, axs = plt.subplots(3, 2, figsize=(18, 22))
     ((ax1, ax2), (ax3, ax4), (ax5, ax6)) = axs
 
-    # start_ratio_overrides: calibrated GASTAT 2021 ratios used as fixed start labels
-    # False=skip label, (ratio, suffix)=ratio with appended text; overrides bypass model t=1 deviation
-    _gdp_start_overrides = [(0.4828, ' (non-oil)'), (0.2806, ' (oil)'), (0.2366, ' (other)')]
+    # 2021 start labels: Baseline shares of GDP Y in the first model period (t=1), computed
+    # from the run (ratio None), with a suffix naming the component
+    _gdp_start_overrides = [(None, ' (non-oil)'), (None, ' (oil)'), (None, ' (other)')]
     _plot_panel(ax1, reports,
                 [('Y_non_oil',   'Non-oil GDP'),
                  ('Y_oil',       'Oil GDP'),
@@ -569,6 +586,7 @@ def plot_bop_comparison(reports):
     Gov_ext_assets_change, financial_account, BoP_check) to keep panels uncluttered.
     All monetary values in Trillion SAR.
     """
+    reports = _truncate_reports(reports)
     scenario_colors = {
         "Baseline":        "#d62728",
         "Vision_2030":     "#ff7f0e",
@@ -819,6 +837,7 @@ import numpy as np
 
 def plot_experiment_variable(reports, variable_name, variable_label=None, unit="", ax=None, show_legend=True, show_annotation_caption=False):
     """Plot experiment results showing different scenarios with mean and standard deviation."""
+    reports = _truncate_reports(reports)
 
     if variable_label is None:
         variable_label = variable_name
@@ -998,6 +1017,7 @@ def plot_stocks_comparison(reports):
     Style  = variable within each panel (solid, dashed, dash-dot, dotted).
     Shaded = +/-1 std dev across stochastic runs.
     """
+    reports = _truncate_reports(reports)
     scenario_colors = {
         "Baseline":        "#d62728",
         "Vision_2030":     "#ff7f0e",
@@ -1232,6 +1252,7 @@ def plot_sectoral_gdp_comparison(reports):
     Color  = scenario.
     Shaded = +/-1 std dev across stochastic runs.
     """
+    reports = _truncate_reports(reports)
     scenario_colors = {
         "Baseline":        "#d62728",
         "Vision_2030":     "#ff7f0e",
