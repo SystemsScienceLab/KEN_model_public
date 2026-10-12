@@ -19,6 +19,42 @@ from dataclasses import fields
 import seaborn as sns 
 import warnings
 
+# Water intensities of mitigation (SI Table water_energy_intensities): m3 per GJ, or billion m3 per MtCO2
+WI_SOLAR = 0.02
+WI_WIND = 0.0
+WI_HYDROGEN = 0.15
+WI_ELECTRIFICATION = 0.005
+WI_CCS_BM3_PER_MT = 0.002
+WI_CCU_BM3_PER_MT = 0.0025
+WI_SGI_BM3_PER_MT = 0.315
+
+
+def wastewater_recovery_rate(t: int) -> float:
+    """Share of urban water use recovered as treated wastewater: 30% in 2021 (t=1), +2 points per year, at most 80%."""
+    return min(0.30 + 0.02 * (t - 1), 0.80)
+
+
+def wastewater_available_for_nexus(v: ModelVariables, t: int) -> float:
+    """
+    Reclaimed wastewater available for mitigation in period t (m3): collectable urban wastewater minus
+    what the reuse sector already delivers to other users. Based on [t-1], because the water module
+    runs after the energy module within a period.
+    """
+    def urban(i): return v.water_use_hh[i] + v.water_use_ind[i] + v.water_use_ser[i]
+    # Both terms are projected one period ahead with their last growth rate
+    g_urban = urban(t-1) / urban(t-2) if t > 2 and urban(t-2) > 0 else 1.0
+    g_reuse = v.water_use_wwater_tot[t-1] / v.water_use_wwater_tot[t-2] if t > 2 and v.water_use_wwater_tot[t-2] > 0 else 1.0
+    return max(0.0, urban(t-1) * g_urban * wastewater_recovery_rate(t) - v.water_use_wwater_tot[t-1] * g_reuse)
+
+
+def nexus_water_other_m3(v: ModelVariables, pc: ParametersCalibrated, t: int) -> float:
+    """Water use of mitigation other than afforestation (m3): solar, wind, hydrogen, electrification, CCS, CCU."""
+    elec_load_gj = v.electricity_use_[t][pc.electrification_target_sectors].sum() if hasattr(pc, 'electrification_target_sectors') else 0.0
+    return (v.re_gen_solar[t] * WI_SOLAR + v.re_gen_wind[t] * WI_WIND + v.hydrogen_production[t] * WI_HYDROGEN
+            + elec_load_gj * WI_ELECTRIFICATION
+            + (v.flow_remove_ccs[t] * WI_CCS_BM3_PER_MT + v.flow_reuse_recycle[t] * WI_CCU_BM3_PER_MT) * 1e9)
+
+
 #########################################################################################################
 def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrated, t: int):
 #################################################################################################################
@@ -174,9 +210,19 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
 
     else:
         # --- TREND LOGIC ---
-        target_total_electricity_generation = v.electricity_use_total[t-1] * (1 + v.Y_growth_rate_forecast[t])
+        # Electricity to supply the water for mitigation (part 7) is a load on top of sectoral demand.
+        # It is reported in v.electricity_nexus_water_total. With p.nexus_water_electricity_feedback it
+        # is also generated for: it is known only at the end of a period, so last period's value is
+        # used, and it is kept out of the trend base, where it would accumulate from year to year.
+        # Default off: the load is below 0.4% of electricity use, but the perturbation shifts a
+        # threshold in the Vision 2030 run around 2040 and moves its 2060 GDP by about 1%.
+        nexus_feedback = getattr(p, 'nexus_water_electricity_feedback', False)
+        nexus_water_load = v.electricity_nexus_water_total[t-1] if nexus_feedback else 0.0
+        sectoral_base = v.electricity_use_total[t-1] - (v.electricity_nexus_water_total[t-2] if nexus_feedback and t > 2 else 0.0)
+        target_sectoral_electricity = sectoral_base * (1 + v.Y_growth_rate_forecast[t])
         efficient_demand_total = np.sum(v.electricity_use_[t])
-        target_total_electricity_generation = np.minimum(target_total_electricity_generation, efficient_demand_total)
+        target_sectoral_electricity = np.minimum(target_sectoral_electricity, efficient_demand_total)
+        target_total_electricity_generation = target_sectoral_electricity + nexus_water_load
         v.electricity_use_total[t] = target_total_electricity_generation
 
         # NET RENEWABLE AVAILABLE FOR ELECTRICITY (Total RE - Used for H2)
@@ -231,7 +277,7 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
         
         x_based_sectoral_total = np.sum(v.electricity_use_[t])
         if x_based_sectoral_total > 0:
-            rescale_factor = target_total_electricity_generation / x_based_sectoral_total
+            rescale_factor = target_sectoral_electricity / x_based_sectoral_total
             v.electricity_use_[t] = v.electricity_use_[t] * rescale_factor
 
     ########################################################################
@@ -317,35 +363,13 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
             
             intended_sequestration = (min_sequestration + max_sequestration)/2.0
             
-            # --- CAP SGI BASED ON AVAILABLE WASTEWATER (FIXED TIME-STEP) ---
-            current_year = 2021 + (t - 1)
+            # --- CAP SGI BASED ON AVAILABLE WASTEWATER ---
+            # Afforestation gets the reclaimed wastewater left after the reuse sector's deliveries to other
+            # users and after the other mitigation uses (solar, wind, H2, electrification, CCS, CCU)
+            avail_for_sgi_m3 = max(0.0, wastewater_available_for_nexus(v, t) - nexus_water_other_m3(v, pc, t))
+            max_seq_from_water = avail_for_sgi_m3 / (WI_SGI_BM3_PER_MT * 1e9)
             
-            # Use [t-1] because the water module hasn't calculated [t] yet!
-            hh_w = v.water_use_hh[t-1] if hasattr(v, 'water_use_hh') else 0.0
-            ind_w = v.water_use_ind[t-1] if hasattr(v, 'water_use_ind') else 0.0
-            ser_w = v.water_use_ser[t-1] if hasattr(v, 'water_use_ser') else 0.0
-            
-            # 1. Total available wastewater pool
-            avail_ww_m3 = (hh_w + ind_w + ser_w) * min(0.30 + 0.02 * (current_year - 2021), 0.80)
-            
-            # 2. Subtract other green nexus demands (Solar, Wind, H2, CCU, CCS)
-            w_sol = (v.re_gen_solar[t] * 0.02) * 1e-9
-            w_win = (v.re_gen_wind[t] * 0.0) * 1e-9
-            w_h2 = (v.hydrogen_production[t] * 0.15) * 1e-9
-            e_load = v.electricity_use_[t][pc.electrification_target_sectors].sum() if hasattr(pc, 'electrification_target_sectors') else 0.0
-            w_elec = (e_load * 0.005) * 1e-9
-            w_ccs = v.flow_remove_ccs[t] * 0.002
-            w_ccu = v.flow_reuse_recycle[t] * 0.0025
-            
-            other_nexus_m3 = (w_sol + w_win + w_h2 + w_elec + w_ccs + w_ccu) * 1e9
-            
-            # 3. Calculate max water available strictly for planting trees
-            avail_for_sgi_m3 = max(0.0, avail_ww_m3 - other_nexus_m3)
-            
-            # 4. Convert available water back to max Mt of CO2 (0.315 billion m3 = 0.315 * 1e9 m3 per Mt)
-            max_seq_from_water = avail_for_sgi_m3 / (0.315 * 1e9)
-            
-            # 5. Stop planting if water limit is reached
+            # Stop planting if water limit is reached
             v.flow_remove_nature[t] = min(intended_sequestration, max_seq_from_water)
             
             # --------------------------------------------------------------------------------
@@ -437,33 +461,13 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
             
             intended_sequestration = (min_sequestration + max_sequestration) / 2.0
             
-            # --- CAP SGI BASED ON AVAILABLE WASTEWATER (FIXED TIME-STEP) ---
-            current_year = 2021 + (t - 1)
+            # --- CAP SGI BASED ON AVAILABLE WASTEWATER ---
+            # Afforestation gets the reclaimed wastewater left after the reuse sector's deliveries to other
+            # users and after the other mitigation uses (solar, wind, H2, electrification, CCS, CCU)
+            avail_for_sgi_m3 = max(0.0, wastewater_available_for_nexus(v, t) - nexus_water_other_m3(v, pc, t))
+            max_seq_from_water = avail_for_sgi_m3 / (WI_SGI_BM3_PER_MT * 1e9)
             
-            # Use [t-1] because the water module hasn't calculated [t] yet!
-            hh_w = v.water_use_hh[t-1] if hasattr(v, 'water_use_hh') else 0.0
-            ind_w = v.water_use_ind[t-1] if hasattr(v, 'water_use_ind') else 0.0
-            ser_w = v.water_use_ser[t-1] if hasattr(v, 'water_use_ser') else 0.0
-            
-            # 1. Total available wastewater pool
-            avail_ww_m3 = (hh_w + ind_w + ser_w) * min(0.30 + 0.02 * (current_year - 2021), 0.80)
-            
-            # 2. Subtract other green nexus demands
-            w_sol = (v.re_gen_solar[t] * 0.02) * 1e-9
-            w_win = (v.re_gen_wind[t] * 0.0) * 1e-9
-            w_h2 = (v.hydrogen_production[t] * 0.15) * 1e-9
-            e_load = v.electricity_use_[t][pc.electrification_target_sectors].sum() if hasattr(pc, 'electrification_target_sectors') else 0.0
-            w_elec = (e_load * 0.005) * 1e-9
-            w_ccs = v.flow_remove_ccs[t] * 0.002
-            w_ccu = v.flow_reuse_recycle[t] * 0.0025
-            
-            other_nexus_m3 = (w_sol + w_win + w_h2 + w_elec + w_ccs + w_ccu) * 1e9
-            
-            # 3. Calculate max water available strictly for planting trees
-            avail_for_sgi_m3 = max(0.0, avail_ww_m3 - other_nexus_m3)
-            max_seq_from_water = avail_for_sgi_m3 / (0.315 * 1e9)
-            
-            # 4. Stop planting if water limit is reached
+            # Stop planting if water limit is reached
             v.flow_remove_nature[t] = min(intended_sequestration, max_seq_from_water)
             
             # --------------------------------------------------------------------------------
@@ -565,83 +569,23 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
     # Quantify the water demand for energy generation, green technologies, 
     # and carbon sequestration (SGI) based on literature intensities.
     
-    # 1. Define Water Intensities (Literature-based)
-    wi_solar = 0.02 
-    wi_wind = 0.0 
-    wi_hydrogen = 0.15 
-    wi_ccs_bm3_per_mt = 0.002 
-    wi_ccu_bm3_per_mt = 0.0025 
-    wi_sgi_bm3_per_mt = 0.315 
-    wi_electrification = 0.005 
+    # Water demand by technology (identical intensities in all scenarios)
+    total_nexus_water_m3 = nexus_water_other_m3(v, pc, t) + v.flow_remove_nature[t] * WI_SGI_BM3_PER_MT * 1e9
+    v.water_use_nexus[t] = total_nexus_water_m3
 
-    # 2. Calculate Water Demand (UNIVERSAL ACROSS SCENARIOS)
-    # Convert GJ to Billion m3 (1 m3 = 1e-9 Billion m3)
-    water_solar_bm3 = (v.re_gen_solar[t] * wi_solar) * 1e-9
-    water_wind_bm3 = (v.re_gen_wind[t] * wi_wind) * 1e-9
-    water_hydrogen_bm3 = (v.hydrogen_production[t] * wi_hydrogen) * 1e-9
-    
-    elec_load_gj = v.electricity_use_[t][pc.electrification_target_sectors].sum() if hasattr(pc, 'electrification_target_sectors') else 0.0
-    water_electrification_bm3 = (elec_load_gj * wi_electrification) * 1e-9
-    
-    water_ccs_bm3 = v.flow_remove_ccs[t] * wi_ccs_bm3_per_mt
-    water_ccu_bm3 = v.flow_reuse_recycle[t] * wi_ccu_bm3_per_mt
-    water_sgi_bm3 = v.flow_remove_nature[t] * wi_sgi_bm3_per_mt
-    
-    # Total Nexus Water Demand (Billion m3)
-    total_nexus_water_bm3 = (water_solar_bm3 + water_wind_bm3 + water_hydrogen_bm3 + 
-                             water_electrification_bm3 + water_ccs_bm3 + water_ccu_bm3 + water_sgi_bm3)
-    total_nexus_water_m3 = total_nexus_water_bm3 * 1e9
-
-    # ----------------------------------------------------------------------
-    # NEW LOGIC: Dynamic Wastewater Supply from Urban Sectors
-    # ----------------------------------------------------------------------
-    # Define parameters safely to prevent errors if variables aren't initialized
-    current_year = 2021 + (t - 1)
-    
-    hh_water = v.water_use_hh[t] if hasattr(v, 'water_use_hh') else 0.0
-    ind_water = v.water_use_ind[t] if hasattr(v, 'water_use_ind') else 0.0
-    ser_water = v.water_use_ser[t] if hasattr(v, 'water_use_ser') else 0.0
-    
-    total_urban_water_used_m3 = hh_water + ind_water + ser_water
-    
-    # Calculate recovery rate: Starts at 30% in 2021, grows 2% per year, capped at 80%
-    recovery_rate = min(0.30 + 0.02 * (current_year - 2021), 0.8)
-    available_wwater_m3 = total_urban_water_used_m3 * recovery_rate
-
-    # 3. Scenario-Based Water Source Allocation
-    is_sust_or_v2030 = False
-    if p is not None:
-        if getattr(p, 'vision_2030_target_CCU_SGI_Carbon', False) or getattr(p, 'Transformation_scenario', False):
-            is_sust_or_v2030 = True
-
+    # Source allocation. With mitigation policy, reclaimed wastewater not delivered to other users is
+    # used up to its availability; a shortfall is met by desalination (70%) and groundwater (30%).
+    is_sust_or_v2030 = (getattr(p, 'vision_2030_target_CCU_SGI_Carbon', False)
+                        or getattr(p, 'Transformation_scenario', False))
     if is_sust_or_v2030:
-        # Transformation / Vision 2030 Scenario: Use Treated Wastewater up to availability
-        if available_wwater_m3 >= total_nexus_water_m3:
-            if hasattr(v, 'water_energy_wwater'):
-                v.water_energy_wwater[t] = total_nexus_water_m3
-                v.water_energy_desal[t] = 0.0
-                v.water_energy_gw[t] = 0.0
-        else:
-            shortfall_m3 = total_nexus_water_m3 - available_wwater_m3
-            if hasattr(v, 'water_energy_wwater'):
-                v.water_energy_wwater[t] = available_wwater_m3
-                v.water_energy_desal[t] = shortfall_m3 * 0.70
-                v.water_energy_gw[t] = shortfall_m3 * 0.30
+        v.water_energy_wwater[t] = min(total_nexus_water_m3, wastewater_available_for_nexus(v, t))
     else:
-        # Baseline / Net Zero Scenario: Use Desalination and GW
-        if hasattr(v, 'water_energy_wwater'):
-            v.water_energy_wwater[t] = 0.0
-            v.water_energy_desal[t] = total_nexus_water_m3 * 0.70
-            v.water_energy_gw[t] = total_nexus_water_m3 * 0.30
-
-    # 4. Update National Total Water Use
-    if hasattr(v, 'water_use_total_national'):
-        if is_sust_or_v2030:
-            # Only add the new abstraction (Desal and GW) to avoid double-counting the wastewater
-            new_abstraction_m3 = (v.water_energy_desal[t] + v.water_energy_gw[t]) if hasattr(v, 'water_energy_desal') else 0.0
-            v.water_use_total_national[t] += new_abstraction_m3
-        else:
-            v.water_use_total_national[t] += total_nexus_water_m3
+        v.water_energy_wwater[t] = 0.0
+    shortfall_m3 = total_nexus_water_m3 - v.water_energy_wwater[t]
+    v.water_energy_desal[t] = shortfall_m3 * 0.70
+    v.water_energy_gw[t] = shortfall_m3 * 0.30
+    # The national water balance (water_module.calculate_water_demand, later in the period) adds
+    # v.water_use_nexus[t] to total water use; nothing is written to the total here.
 # ======================================================================
     # --- PART 7: ENERGY-WATER NEXUS (Energy Demand for Water Supply) ---
     # ======================================================================
@@ -679,9 +623,8 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
         if hasattr(v, 'electricity_nexus_water_total'):
             v.electricity_nexus_water_total[t] = total_nexus_electricity_added_gj
             
-        # 3. Close the Loop: Add this demand back to the national total
-        if hasattr(v, 'electricity_use_total'):
-            v.electricity_use_total[t] += total_nexus_electricity_added_gj
+        # 3. Close the loop (optional, p.nexus_water_electricity_feedback): this load enters national
+        # electricity generation, and with it fuel use and emissions, in the next period (section 3)
             
         # Optional: if a specific water sector index is available in the 40-sector array,
         # the demand can be added directly to that sector so the economy pays for it.

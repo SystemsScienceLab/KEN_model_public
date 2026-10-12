@@ -5522,6 +5522,10 @@ def plot_nexus_water_all_scenarios(exp_reports, start_year=2021):
         water_sgi = sgi_flow * wi_sgi_bm3_per_mt
         
         total_nexus_water_bm3 = water_solar + water_wind + water_h2 + water_elec + water_ccs + water_ccu + water_sgi
+        # The model's own series is used where available, so that the figure shows the mitigation
+        # water that is part of the national water balance (water_use_total_national)
+        if 'water_use_nexus' in rm:
+            total_nexus_water_bm3 = rm['water_use_nexus'].values * 1e-9
         
         # ----------------------------------------------------------------------
         # B. Calculate Energy for Water (TWh)
@@ -5548,6 +5552,8 @@ def plot_nexus_water_all_scenarios(exp_reports, start_year=2021):
         
         total_energy_gj = energy_desal_gj + energy_gw_gj + energy_ww_gj
         total_energy_twh = total_energy_gj / 3600000.0  # Convert GJ to TWh
+        if 'electricity_nexus_water_total' in rm:
+            total_energy_twh = rm['electricity_nexus_water_total'].values / 3600000.0
         
         # ----------------------------------------------------------------------
         # C. Plotting

@@ -695,8 +695,15 @@ def calculate_water_demand(v, p, pc, t):
     v.water_use_ind[t] = np.sum(v.water_use_sectoral_[t][3:40])
     v.water_use_ser[t] = np.sum(v.water_use_sectoral_[t][40:])
     
-    # Aggregate total
-    v.water_use_total_national[t] = np.sum(v.water_use_sectoral_[t]) + v.water_use_hh[t]
+    # Aggregate total, including the water for mitigation from the energy module (renewables,
+    # hydrogen, electrification, CCS, CCU, afforestation), which runs earlier in the period
+    v.water_use_total_national[t] = np.sum(v.water_use_sectoral_[t]) + v.water_use_hh[t] + v.water_use_nexus[t]
+    # Reclaimed wastewater used for mitigation is a supply stream of its own (capacity cost booked in
+    # energy_investment_module); desalination, sector reuse and groundwater supply the remainder
+    v.water_use_supply_mix[t] = v.water_use_total_national[t] - v.water_energy_wwater[t]
+    # Collectable urban wastewater: upper bound for sector reuse plus mitigation reuse
+    from .energy_module import wastewater_recovery_rate
+    v.wwater_collectable[t] = (v.water_use_hh[t] + v.water_use_ind[t] + v.water_use_ser[t]) * wastewater_recovery_rate(t)
     
     return v.water_use_sectoral_[t]
 
@@ -715,8 +722,8 @@ def calculate_aggregate_supply_mix(v, pc, t, p=None):
     v.pot_wwater[t] = v.K_[t][pc.sector_wwater] * pc.eK_wwater * pc.u_wwater / pc.p_wwater_m3
 
     # Initial Allocation (capped by total demand)
-    if (v.pot_desal[t] + v.pot_wwater[t]) > v.water_use_total_national[t]:
-        v.water_use_scale_factor[t] = v.water_use_total_national[t] / (v.pot_desal[t] + v.pot_wwater[t])
+    if (v.pot_desal[t] + v.pot_wwater[t]) > v.water_use_supply_mix[t]:
+        v.water_use_scale_factor[t] = v.water_use_supply_mix[t] / (v.pot_desal[t] + v.pot_wwater[t])
         v.water_use_desal_tot[t] = v.pot_desal[t] * v.water_use_scale_factor[t]
         v.water_use_wwater_tot[t] = v.pot_wwater[t] * v.water_use_scale_factor[t]
     else:
@@ -724,7 +731,7 @@ def calculate_aggregate_supply_mix(v, pc, t, p=None):
         v.water_use_wwater_tot[t] = v.pot_wwater[t]
 
     # Groundwater as residual
-    v.water_use_gw_tot[t] = np.maximum(v.water_use_total_national[t] - v.water_use_desal_tot[t] - v.water_use_wwater_tot[t], 0)
+    v.water_use_gw_tot[t] = np.maximum(v.water_use_supply_mix[t] - v.water_use_desal_tot[t] - v.water_use_wwater_tot[t], 0)
 
     # Constraint: Once groundwater supply becomes 0, it stays 0 (persistent phase-out flag)
     if t > 1:
@@ -736,8 +743,8 @@ def calculate_aggregate_supply_mix(v, pc, t, p=None):
             v.share_desal[t] = v.pot_desal[t] / (v.pot_desal[t] + v.pot_wwater[t])
             v.share_wwater[t] = v.pot_wwater[t] / (v.pot_desal[t] + v.pot_wwater[t])
                 
-            v.water_use_desal_tot[t] = v.water_use_total_national[t] * v.share_desal[t]
-            v.water_use_wwater_tot[t] = v.water_use_total_national[t] * v.share_wwater[t]
+            v.water_use_desal_tot[t] = v.water_use_supply_mix[t] * v.share_desal[t]
+            v.water_use_wwater_tot[t] = v.water_use_supply_mix[t] * v.share_wwater[t]
 
             # Deliveries cannot exceed installed capacity (plus a utilisation headroom): water
             # without capital behind it would break the physical-monetary link (capital, IO cost).
@@ -748,7 +755,7 @@ def calculate_aggregate_supply_mix(v, pc, t, p=None):
                 v.water_use_desal_tot[t] = min(v.water_use_desal_tot[t], cap_desal)
                 v.water_use_wwater_tot[t] = min(v.water_use_wwater_tot[t], cap_wwater)
                 # Spare capacity of one source covers a shortfall of the other
-                shortfall = v.water_use_total_national[t] - v.water_use_desal_tot[t] - v.water_use_wwater_tot[t]
+                shortfall = v.water_use_supply_mix[t] - v.water_use_desal_tot[t] - v.water_use_wwater_tot[t]
                 if shortfall > 0:
                     extra = min(shortfall, cap_desal - v.water_use_desal_tot[t])
                     v.water_use_desal_tot[t] += extra
@@ -858,6 +865,10 @@ def water_accounting(v: "ModelVariables", p: "ModelParameters", pc: "ParametersC
     }
     sources_order = ["desal", "wwater", "gw"]
     col_totals = np.array([supplies_dict[k] for k in sources_order])
+    # Mitigation water not covered by reclaimed wastewater is supplied by these sources too but is
+    # no row of the matrix: allocate to the four user groups only what they receive
+    if col_totals.sum() > 0:
+        col_totals = col_totals * row_totals.sum() / col_totals.sum()
     
     # 3.3 Initial Matrix (Based on Target Demand Structure)
     shares = get_current_allocation_shares(pc, t)
@@ -929,7 +940,7 @@ def water_accounting(v: "ModelVariables", p: "ModelParameters", pc: "ParametersC
     if verbose:
         current_year = 2021 + (t - 1)
         print (f"Year {current_year}: Total Water Use = {v.water_use_total_national[t]/1e9:.2f} bln m3")
-        print (f"Supply Mix: Desal={v.water_use_desal_tot[t]/1e9:.2f}, WW={v.water_use_wwater_tot[t]/1e9:.2f}, GW={v.water_use_gw_tot[t]/1e9:.2f}")
+        print (f"Supply Mix: Desal={v.water_use_desal_tot[t]/1e9:.2f}, WW={v.water_use_wwater_tot[t]/1e9:.2f}, GW={v.water_use_gw_tot[t]/1e9:.2f}, WW for mitigation={v.water_energy_wwater[t]/1e9:.2f}")
 
 
 # ==========================================

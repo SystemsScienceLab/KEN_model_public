@@ -105,7 +105,7 @@ LEGEND_FONT_SIZE = 18
 ANNOTATION_FONT_SIZE = 18
 SUB_LABEL_SIZE = 18
 
-def resolve_overlaps(points):
+def resolve_overlaps(points, ax=None):
     """Helper to prevent overlapping end-point annotations"""
     if not points: return []
     points.sort(key=lambda x: x['y'])
@@ -113,6 +113,11 @@ def resolve_overlaps(points):
     y_range = max(y_vals) - min(y_vals) if len(y_vals) > 1 else 1.0
     if y_range == 0: y_range = max(y_vals) * 0.1 if max(y_vals) > 0 else 1.0
     buffer = y_range * 0.08
+    # The labels have a fixed height on the page, so the gap has to be measured against the axis
+    # range: labels that are close together relative to it would otherwise still overlap
+    if ax is not None:
+        y_lo, y_hi = ax.get_ylim()
+        buffer = max(buffer, (y_hi - y_lo) * 0.075)
     for i in range(1, len(points)):
         prev = points[i-1]
         curr = points[i]
@@ -144,6 +149,7 @@ def plot_water_use_comparison(all_results):
         ('water_use_ind', 'Total Industrial Water Use'),
         ('water_use_ser', 'Total Service Water Use'),
         ('water_use_hh', 'Total Household Water Use'),
+        ('water_use_nexus', 'Water Use for Mitigation'),
         ('water_use_total_national', 'Total Water Use (Demand)')
     ]
     
@@ -165,7 +171,7 @@ def plot_water_use_comparison(all_results):
         
         # Apply non-overlapping annotations
         if endpoints_2060:
-            for p_annotate in resolve_overlaps(endpoints_2060):
+            for p_annotate in resolve_overlaps(endpoints_2060, ax):
                 ax.annotate(p_annotate['label'], xy=(2060, p_annotate['real_y']), xytext=(2061.2, p_annotate['y']), 
                             color=p_annotate['color'], fontweight='bold', fontsize=ANNOTATION_FONT_SIZE, va='center', ha='left',
                             arrowprops=dict(arrowstyle="-", color=p_annotate['color'], alpha=0.4) if abs(p_annotate['y']-p_annotate['real_y']) > 0.01 else None)
@@ -217,7 +223,8 @@ def plot_water_balance_verification(all_results):
         
         # Data in Billion m3
         desal = df["water_use_desal_tot"] / 1e9
-        wwater = df["water_use_wwater_tot"] / 1e9
+        # Reuse: deliveries of the reuse sector plus reclaimed wastewater used for mitigation
+        wwater = (df["water_use_wwater_tot"] + df["water_energy_wwater"]) / 1e9
         gw = df["water_use_gw_tot"] / 1e9
         total = df['water_use_total_national'] / 1e9
         
@@ -252,11 +259,12 @@ def plot_scenario_trends_comparison(all_results):
     scenarios = list(all_results.keys())
     years = all_results[scenarios[0]].index + 2020
     
+    # Reuse: deliveries of the reuse sector plus reclaimed wastewater used for mitigation
     metrics = {
-        "Total Water Supply": 'water_use_total_national',
-        "Desalination Supply": "water_use_desal_tot",
-        "Wastewater Reuse Supply": "water_use_wwater_tot",
-        "Groundwater Supply": "water_use_gw_tot"
+        "Total Water Supply": ['water_use_total_national'],
+        "Desalination Supply": ["water_use_desal_tot"],
+        "Wastewater Reuse Supply": ["water_use_wwater_tot", "water_energy_wwater"],
+        "Groundwater Supply": ["water_use_gw_tot"]
     }
     
     colors = {
@@ -266,12 +274,12 @@ def plot_scenario_trends_comparison(all_results):
         "Transformation": "#1f77b4",  # Blue
     }
     
-    for i, (title, var_name) in enumerate(metrics.items()):
+    for i, (title, var_names) in enumerate(metrics.items()):
         ax = axes[i]
         endpoints_2060 = []
         
         for sc in scenarios:
-            data = all_results[sc][var_name] / 1e9
+            data = all_results[sc][var_names].sum(axis=1) / 1e9
             ax.plot(years, data, label=SCENARIO_LABELS.get(sc, sc), color=colors.get(sc), linewidth=3)
             
             # Extract 2060 value for annotation
@@ -282,7 +290,7 @@ def plot_scenario_trends_comparison(all_results):
                 
         # Apply non-overlapping annotations
         if endpoints_2060:
-            for p_annotate in resolve_overlaps(endpoints_2060):
+            for p_annotate in resolve_overlaps(endpoints_2060, ax):
                 ax.annotate(p_annotate['label'], xy=(2060, p_annotate['real_y']), xytext=(2061.2, p_annotate['y']), 
                             color=p_annotate['color'], fontweight='bold', fontsize=ANNOTATION_FONT_SIZE, va='center', ha='left',
                             arrowprops=dict(arrowstyle="-", color=p_annotate['color'], alpha=0.4) if abs(p_annotate['y']-p_annotate['real_y']) > 0.01 else None)
@@ -439,7 +447,7 @@ def plot_irrigation_costs(all_results):
                 
         # Apply non-overlapping annotations
         if endpoints_2060:
-            for p_annotate in resolve_overlaps(endpoints_2060):
+            for p_annotate in resolve_overlaps(endpoints_2060, ax):
                 ax.annotate(p_annotate['label'], xy=(2060, p_annotate['real_y']), xytext=(2061.2, p_annotate['y']), 
                             color=p_annotate['color'], fontweight='bold', fontsize=ANNOTATION_FONT_SIZE, va='center', ha='left',
                             arrowprops=dict(arrowstyle="-", color=p_annotate['color'], alpha=0.4) if abs(p_annotate['y']-p_annotate['real_y']) > 0.01 else None)
@@ -472,8 +480,9 @@ def plot_agri_trilemma(all_results, all_sectoral_results, agr_sector=0, save_pat
     """
     Plot 6: agri_trilemma_water_food_trade.pdf
     Line plot: food self-sufficiency, agricultural imports and agricultural water use.
-    (a) Domestic agricultural output and (b) agricultural imports, both real (2021 prices),
-    (c) agricultural water use with the 2021 level (cap of the transformation scenario).
+    (a) Domestic agricultural output and (b) agricultural imports, both nominal (current prices)
+    like the other monetary figures, (c) agricultural water use with the 2021 level (cap of the
+    transformation scenario).
     """
     fig, axes = plt.subplots(1, 3, figsize=(18, 6))
     axes = axes.flatten()
@@ -490,10 +499,10 @@ def plot_agri_trilemma(all_results, all_sectoral_results, agr_sector=0, save_pat
 
     # (title, y-axis label, data per scenario)
     panels = [
-        ("Domestic Agricultural Output", "Billion SAR (2021 prices)",
-         lambda sc: all_sectoral_results[sc]['x'].iloc[:, agr_sector] / 1e6),
-        ("Agricultural Imports", "Billion SAR (2021 prices)",
-         lambda sc: all_sectoral_results[sc]['im'].iloc[:, agr_sector] / 1e6),
+        ("Domestic Agricultural Output", "Billion SAR",
+         lambda sc: all_sectoral_results[sc]['X'].iloc[:, agr_sector] / 1e6),
+        ("Agricultural Imports", "Billion SAR",
+         lambda sc: all_sectoral_results[sc]['IM'].iloc[:, agr_sector] / 1e6),
         ("Agricultural Water Use", "Billion m3",
          lambda sc: all_results[sc]['water_use_agr'] / 1e9),
     ]
@@ -521,7 +530,7 @@ def plot_agri_trilemma(all_results, all_sectoral_results, agr_sector=0, save_pat
 
         # Apply non-overlapping annotations
         if endpoints_2060:
-            for p_annotate in resolve_overlaps(endpoints_2060):
+            for p_annotate in resolve_overlaps(endpoints_2060, ax):
                 ax.annotate(p_annotate['label'], xy=(2060, p_annotate['real_y']), xytext=(2061.2, p_annotate['y']),
                             color=p_annotate['color'], fontweight='bold', fontsize=ANNOTATION_FONT_SIZE, va='center', ha='left',
                             arrowprops=dict(arrowstyle="-", color=p_annotate['color'], alpha=0.4) if abs(p_annotate['y']-p_annotate['real_y']) > 0.01 else None)

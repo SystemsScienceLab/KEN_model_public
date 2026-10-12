@@ -292,6 +292,14 @@ class ModelVariables:
     I_wwater_cap: NDArray                       # Own capacity investment in wastewater treatment, before energy add-ons (1000 SAR)
     water_supply_gap: NDArray                   # Demand not coverable by desalination/reuse capacity after the groundwater phase-out (m3)
     water_gw_phased_out: NDArray                # 1 once groundwater abstraction has been phased out (persistent), else 0
+    # Water for mitigation (energy_module part 6): renewables, hydrogen, electrification, CCS, CCU, afforestation
+    water_use_nexus: NDArray                    # Water use of mitigation technologies and afforestation (m3), part of water_use_total_national
+    water_energy_wwater: NDArray                # ... of which reclaimed wastewater not delivered to other users (m3)
+    water_energy_desal: NDArray                 # ... of which desalination (m3), shortfall only
+    water_energy_gw: NDArray                    # ... of which groundwater (m3), shortfall only
+    water_use_supply_mix: NDArray               # Water use met by desalination, sector reuse and groundwater: total minus water_energy_wwater (m3)
+    wwater_collectable: NDArray                 # Collectable urban wastewater: recovery rate x household, industry and service water use (m3)
+    electricity_nexus_water_total: NDArray      # Electricity to supply the water for mitigation (GJ)
 
     #################################################################################################################################################
     # Water Supply (Desalination & Wastewater)

@@ -291,22 +291,10 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
         v.I_netzero_ccs_[t][chem_idx] = cost_ccs
 
 # --- B. NATURE INVESTMENT (SGI - Afforestation & Water Infrastructure) ---
-        # While physical sequestration is random, financial investment is based 
-        # on the EXPECTED (Mean) planting capacity trajectory.
-        
-        def get_expected_nature_cap(time_step):
-            if time_step <= 1:
-                return 1.0 # 1 Mt Mean in 2021
-            elif time_step <= 40:
-                fraction = (time_step - 1) / 39.0
-                # Quadratic expansion from 1.0 Mt (2021) to 60.0 Mt Mean (2060)
-                return 1.0 + (60.0 - 1.0) * (fraction ** 2)
-            else:
-                return 60.0 # Cap maintains after 2060
-
-        nature_cap_needed = get_expected_nature_cap(t)
-        nature_prev = get_expected_nature_cap(t - 1) if t > 1 else 0.0
-        nature_added = np.maximum(0, nature_cap_needed - nature_prev)
+        # Investment follows the sequestration actually deployed, i.e. after the wastewater cap
+        # (energy_module), not the uncapped policy target. The energy module runs after the investment
+        # module within a period, so the capacity added in the previous period is used.
+        nature_added = np.maximum(0, v.flow_remove_nature[t-1] - v.flow_remove_nature[t-2]) if t > 1 else 0.0
         
         # ----------------------------------------------------------------------
         # 1. Tree Planting Cost (Assigned to Agriculture)

@@ -33,7 +33,7 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
     if t == 1:
         v.I_[t][pc.sector_desal] = pc.I_desal
         v.I_[t][pc.sector_wwater] = pc.I_wwater
-    elif ((v.pot_desal[t-1] + v.pot_wwater[t-1]) > v.water_use_total_national[t-1]) and (t > p.vision_2030_timing):
+    elif ((v.pot_desal[t-1] + v.pot_wwater[t-1]) > v.water_use_supply_mix[t-1]) and (t > p.vision_2030_timing):
         # Case: Overcapacity (Supply > Demand) AND outside Vision 2030 period -> Stop Investment
         v.I_[t][pc.sector_desal] = 0
         v.I_[t][pc.sector_wwater] = 0
@@ -50,7 +50,7 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
         policy_high_growth = (p.desalination_high_growth == 1) and (t <= p.vision_2030_timing)
         
         # Condition B: Demand Driven (Water Gap)
-        demand_high_growth = (v.water_use_total_national[t-1] > (v.pot_desal[t-1] + v.pot_wwater[t-1]))
+        demand_high_growth = (v.water_use_supply_mix[t-1] > (v.pot_desal[t-1] + v.pot_wwater[t-1]))
         
         use_high_growth = policy_high_growth or demand_high_growth
 
@@ -93,7 +93,8 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
     # in t (capacity available in t+1, see K_ accumulation in model.py) covers the capacity
     # required by expected demand in t+1. Before the phase-out, groundwater remains the residual.
     if t > 2 and v.water_gw_phased_out[t-1] > 0:
-        _d1, _d2 = v.water_use_total_national[t-1], v.water_use_total_national[t-2]
+        # Demand without the reclaimed wastewater used for mitigation, which these sectors do not supply
+        _d1, _d2 = v.water_use_supply_mix[t-1], v.water_use_supply_mix[t-2]
         _growth = _d1 / _d2 if _d2 > 0 else 1.0
         expected_demand = _d1 * _growth ** 2
         _pot = v.pot_desal[t-1] + v.pot_wwater[t-1]
