@@ -80,8 +80,10 @@ def plot_electricity_generation_mix(results: 'ModelResults'):
     elec_idx = pc.electricity_sector_idx
     
     # Get the historical/forced generation values for Oil and Gas
-    gas_for_elec_gj = sectoral["gas_use_final"][elec_idx]
-    oil_for_elec_gj = sectoral["oil_use_final"][elec_idx]
+    # The power sector's oil and gas use is fuel input; multiply by the plant efficiency to get
+    # the electricity generated from it.
+    gas_for_elec_gj = sectoral["gas_use_final"][elec_idx] * pc.power_plant_efficiency_gas
+    oil_for_elec_gj = sectoral["oil_use_final"][elec_idx] * pc.power_plant_efficiency_oil
     
     # Get the actual renewable generation (this is the one growing at 10%)
     re_for_elec_gj = macro["renewable_energy_generation"]
@@ -460,12 +462,14 @@ def plot_renewable_energy_assumptions(config: ModelConfig, T: int):
     GJ_TO_EJ = 1e-9 # Conversion factor from Gigajoules to Exajoules
 
     # --- 1. Calculate the Trend Scenario Pathway ---
-    # This simulates the simple exponential growth based on the trend rate parameter.
+    # Historical generation 2021-2025, then the linear trend used in the model
+    # (energy_investment_module.py: + pc.re_trend_annual_addition_gj per year).
     trend_generation = np.zeros(T)
-    if T > 0:
-        trend_generation[0] = pc.initial_RE_generation
-        for t in range(1, T):
-            trend_generation[t] = trend_generation[t-1] * (1 + p.gRE_trend_rate)
+    n_hist = min(T, len(pc.hist_power_years))
+    hist_re = pc.hist_power_solar_gj + pc.hist_power_wind_gj + pc.hist_power_bio_gj
+    trend_generation[:n_hist] = hist_re[:n_hist]
+    for t in range(n_hist, T):
+        trend_generation[t] = trend_generation[t-1] + pc.re_trend_annual_addition_gj
 
     # --- 2. Calculate the Vision 2030 Share Pathway ---
     # This visualizes the linear target path for the share of renewables until 2030.
@@ -5174,15 +5178,17 @@ def plot_energy_scenarios(exp_reports, start_year=2021):
         elif ax_idx == 0 or ax_idx == 6: # plot a or g
             ax2 = ax.twinx()
             # Make the EJ axis label, ticks, and spine GREY
-            ax2.set_ylabel("EJ", fontweight='bold', fontsize=LABEL_FONT_SIZE, color='grey')
+            ax2.annotate("EJ", xy=(1.0, 1.01), xycoords='axes fraction', ha='center', va='bottom',
+                         fontweight='bold', fontsize=LABEL_FONT_SIZE, color='grey')
             ax2.tick_params(axis='y', labelsize=TICK_FONT_SIZE, colors='grey')
+            ax2.grid(False)  # gridlines come from the TWh axis only
             ax2.spines['right'].set_color('grey')
             
         endpoints_2060 = []
         midpoint_annotations = {2030: [], 2040: [], 2050: []}
         has_data = False
         
-        ax.text(-0.05, 1.05, f"({string.ascii_lowercase[ax_idx]})", transform=ax.transAxes, 
+        ax.text(-0.12, 1.07, f"({string.ascii_lowercase[ax_idx]})", transform=ax.transAxes, 
                 fontsize=SUB_LABEL_SIZE, fontweight='bold', va='top')
 
         for sc_idx, (sc_name, runs) in enumerate(exp_reports.items()):
@@ -5231,11 +5237,7 @@ def plot_energy_scenarios(exp_reports, start_year=2021):
                 has_data = True
                 
                 # Plot secondary line ONLY for plots (a) and (g) [TWh to EJ conversion]
-                if (ax_idx == 0 or ax_idx == 6) and ax2 is not None:
-                    # 1 TWh = 0.0036 EJ
-                    series_vals_ej = series_vals * 0.0036
-                    # Zero-width sentinel line used only to scale the secondary grey axis
-                    ax2.plot(years, series_vals_ej, color=color, linewidth=0, alpha=0) 
+                # (The EJ axis of plots (a) and (g) is set from the TWh axis after the y-ticks, below.)
                 
                 # ======================================================================
                 # --- UNCERTAINTY BANDS LOGIC FOR EMISSIONS & INVESTMENT ---
@@ -5338,24 +5340,6 @@ def plot_energy_scenarios(exp_reports, start_year=2021):
                                 'y': v, 'real_y': v, 'label': f"{p_val:.1f}%", 'color': color, 'yr': target_yr
                             })
 
-        if endpoints_2060:
-            for p_annotate in resolve_overlaps(endpoints_2060, ax_idx):
-                
-                if ax_idx == 1:
-                    # Plot (b) annotations inside the plot (Right Aligned)
-                    ax.annotate(p_annotate['label'], xy=(2060, p_annotate['real_y']), xytext=(2058, p_annotate['y']), 
-                                color=p_annotate['color'], fontweight='bold', fontsize=ANNOTATION_FONT_SIZE,
-                                va='center', ha='right',
-                                arrowprops=dict(arrowstyle="-", color=p_annotate['color'], alpha=0.4) if abs(p_annotate['y']-p_annotate['real_y']) > 0.01 else None)
-                else:
-                    # All other plots annotations on the right side (Left Aligned)
-                    ax.annotate(p_annotate['label'], xy=(2060, p_annotate['real_y']), xytext=(2061.2, p_annotate['y']), 
-                                color=p_annotate['color'], fontweight='bold', fontsize=ANNOTATION_FONT_SIZE,
-                                va='center', ha='left',
-                                arrowprops=dict(arrowstyle="-", color=p_annotate['color'], alpha=0.4) if abs(p_annotate['y']-p_annotate['real_y']) > 0.01 else None)
-                                
-                ax.scatter([2060], [p_annotate['real_y']], color=p_annotate['color'], s=30, zorder=5)
-
         if var_name == 'I_RE':
             for yr, points in midpoint_annotations.items():
                 if not points: continue
@@ -5376,11 +5360,8 @@ def plot_energy_scenarios(exp_reports, start_year=2021):
         ax.tick_params(axis='both', labelsize=TICK_FONT_SIZE)
         
         # Set x-axis limit up to 2060
+        ax.set_xticks(np.arange(2025, 2061, 5))
         ax.set_xlim(start_year, 2060)
-        
-        # Ensure x-axis ticks do not exceed 2060
-        ticks = ax.get_xticks()
-        ax.set_xticks(ticks[ticks <= 2060])
         
         # Apply specific Y-axis ticks for Plot (a) and (g)
         if ax_idx == 0:
@@ -5391,6 +5372,38 @@ def plot_energy_scenarios(exp_reports, start_year=2021):
             ax.set_yticks([250, 750, 1250, 1750, 2250])
             if ax2 is not None:
                 ax2.set_yticks([1, 3, 5, 7, 9])
+
+        # EJ axis of plots (a) and (g): scaled exactly from the TWh axis (1 TWh = 0.0036 EJ)
+        if (ax_idx == 0 or ax_idx == 6) and ax2 is not None:
+            y0_, y1_ = ax.get_ylim()
+            ax2.set_ylim(y0_ * 0.0036, y1_ * 0.0036)
+
+        # --- End-point labels (after the y-limits are final) ---
+        if endpoints_2060:
+            y0_, y1_ = ax.get_ylim()
+            gap_ = (y1_ - y0_) * 0.07          # minimum vertical distance between labels
+            pts_ = sorted(endpoints_2060, key=lambda x: x['y'])
+            for i_ in range(1, len(pts_)):
+                if pts_[i_]['y'] - pts_[i_-1]['y'] < gap_:
+                    pts_[i_]['y'] = pts_[i_-1]['y'] + gap_
+            if pts_[-1]['y'] > y1_ - gap_ / 2:
+                shift_ = pts_[-1]['y'] - (y1_ - gap_ / 2)
+                for pt_ in pts_: pt_['y'] -= shift_
+            for p_annotate in pts_:
+                if ax_idx == 1:
+                    # Plot (b) annotations inside the plot (Right Aligned)
+                    xytext_, coords_, ha_ = (2058, p_annotate['y']), 'data', 'right'
+                elif ax_idx == 0 or ax_idx == 6:
+                    # Plots (a) and (g): right of the EJ tick labels
+                    xytext_, coords_, ha_ = (1.15, p_annotate['y']), ('axes fraction', 'data'), 'left'
+                else:
+                    xytext_, coords_, ha_ = (2061.2, p_annotate['y']), 'data', 'left'
+                ax.annotate(p_annotate['label'], xy=(2060, p_annotate['real_y']), xytext=xytext_, textcoords=coords_,
+                            color=p_annotate['color'], fontweight='bold', fontsize=ANNOTATION_FONT_SIZE,
+                            va='center', ha=ha_, annotation_clip=False,
+                            arrowprops=dict(arrowstyle="-", color=p_annotate['color'], alpha=0.4)
+                            if abs(p_annotate['y'] - p_annotate['real_y']) > 1e-9 else None)
+                ax.scatter([2060], [p_annotate['real_y']], color=p_annotate['color'], s=30, zorder=5, clip_on=False)
         
         # --- Specific Legend Rules ---
         if has_data: 
@@ -5453,9 +5466,12 @@ def plot_nexus_water_all_scenarios(exp_reports, start_year=2021):
     
     # Create EJ secondary axis for plot b (ax2)
     ax2_ej = ax2.twinx()
-    ax2_ej.set_ylabel("EJ", fontweight='bold', fontsize=LABEL_FONT_SIZE, color='grey')
+    # Unit label above the axis, so it does not collide with the end-point labels at the right
+    ax2_ej.annotate("EJ", xy=(1.0, 1.01), xycoords='axes fraction', ha='center', va='bottom',
+                    fontweight='bold', fontsize=LABEL_FONT_SIZE, color='grey')
     ax2_ej.tick_params(axis='y', labelsize=TICK_FONT_SIZE, colors='grey')
     ax2_ej.spines['right'].set_color('grey')
+    ax2_ej.grid(False)  # gridlines come from the TWh axis only
     
     has_data = False
     
@@ -5579,8 +5595,6 @@ def plot_nexus_water_all_scenarios(exp_reports, start_year=2021):
             # Plot 2: Energy for Water
             ax2.plot(years, smoothed_energy, label=sc_name, color=color, linewidth=3.0)
             
-            # Zero-width sentinel line for scaling the EJ secondary axis (1 TWh = 0.0036 EJ)
-            ax2_ej.plot(years, smoothed_energy * 0.0036, color=color, linewidth=0, alpha=0)
             
             has_data = True
             
@@ -5594,36 +5608,6 @@ def plot_nexus_water_all_scenarios(exp_reports, start_year=2021):
                 val_energy_60 = smoothed_energy[idx_60]
                 endpoints_ax2.append({'y': val_energy_60, 'real_y': val_energy_60, 'label': f"{val_energy_60:.3f} TWh", 'color': color})
 
-    # --- Overlap Resolution Helper ---
-    def resolve_overlaps(points):
-        if not points: return []
-        points.sort(key=lambda x: x['y'])
-        y_vals = [p['y'] for p in points]
-        y_range = max(y_vals) - min(y_vals) if len(y_vals) > 1 else 1.0
-        if y_range == 0: y_range = max(y_vals) * 0.1 if max(y_vals) > 0 else 1.0
-        buffer = y_range * 0.08
-        for i in range(1, len(points)):
-            prev = points[i-1]
-            curr = points[i]
-            if curr['y'] - prev['y'] < buffer:
-                curr['y'] = prev['y'] + buffer
-        return points
-
-    # --- Apply Annotations ---
-    if endpoints_ax1:
-        for p_annotate in resolve_overlaps(endpoints_ax1):
-            ax1.annotate(p_annotate['label'], xy=(2060, p_annotate['real_y']), xytext=(2061.2, p_annotate['y']), 
-                         color=p_annotate['color'], fontweight='bold', fontsize=ANNOTATION_FONT_SIZE, va='center', ha='left',
-                         arrowprops=dict(arrowstyle="-", color=p_annotate['color'], alpha=0.4) if abs(p_annotate['y']-p_annotate['real_y']) > 0.01 else None)
-            ax1.scatter([2060], [p_annotate['real_y']], color=p_annotate['color'], s=40, zorder=5)
-
-    if endpoints_ax2:
-        for p_annotate in resolve_overlaps(endpoints_ax2):
-            ax2.annotate(p_annotate['label'], xy=(2060, p_annotate['real_y']), xytext=(2061.2, p_annotate['y']), 
-                         color=p_annotate['color'], fontweight='bold', fontsize=ANNOTATION_FONT_SIZE, va='center', ha='left',
-                         arrowprops=dict(arrowstyle="-", color=p_annotate['color'], alpha=0.4) if abs(p_annotate['y']-p_annotate['real_y']) > 0.01 else None)
-            ax2.scatter([2060], [p_annotate['real_y']], color=p_annotate['color'], s=40, zorder=5)
-
     # --- Final Formatting ---
     if has_data:
         # Format ax1 (Water)
@@ -5632,9 +5616,8 @@ def plot_nexus_water_all_scenarios(exp_reports, start_year=2021):
         ax1.set_xlabel("Year", fontweight='bold', fontsize=LABEL_FONT_SIZE)
         
         # Restrict to 2060 limits
+        ax1.set_xticks(np.arange(2025, 2061, 5))
         ax1.set_xlim(start_year, 2060)
-        ticks1 = ax1.get_xticks()
-        ax1.set_xticks(ticks1[ticks1 <= 2060])
         
         # Apply 20% buffer to the global maximum water value
         if global_max_water > 0:
@@ -5649,9 +5632,8 @@ def plot_nexus_water_all_scenarios(exp_reports, start_year=2021):
         ax2.set_xlabel("Year", fontweight='bold', fontsize=LABEL_FONT_SIZE)
         
         # Restrict to 2060 limits
+        ax2.set_xticks(np.arange(2025, 2061, 5))
         ax2.set_xlim(start_year, 2060)
-        ticks2 = ax2.get_xticks()
-        ax2.set_xticks(ticks2[ticks2 <= 2060])
         
         # Apply 20% buffer to the global maximum energy value
         if global_max_energy > 0:
@@ -5660,7 +5642,43 @@ def plot_nexus_water_all_scenarios(exp_reports, start_year=2021):
         ax2.tick_params(axis='both', labelsize=TICK_FONT_SIZE)
         # Legend explicitly removed from ax2
         
+    # --- End-point labels (after the y-limits are set) ---
+    def resolve_overlaps(points, ax, min_gap_frac=0.07):
+        """Spread labels so that neighbours are at least min_gap_frac of the axis height apart."""
+        if not points: return []
+        y0, y1 = ax.get_ylim()
+        gap = (y1 - y0) * min_gap_frac
+        points.sort(key=lambda x: x['y'])
+        for i in range(1, len(points)):
+            if points[i]['y'] - points[i-1]['y'] < gap:
+                points[i]['y'] = points[i-1]['y'] + gap
+        top = y1 - gap / 2   # keep the highest label inside the axis; shift the stack down if needed
+        if points[-1]['y'] > top:
+            shift = points[-1]['y'] - top
+            for pt in points: pt['y'] -= shift
+        return points
+
+    def annotate_endpoints(ax, points, x_text, text_coords):
+        for pt in resolve_overlaps(points, ax):
+            ax.annotate(pt['label'], xy=(2060, pt['real_y']), xytext=(x_text, pt['y']), textcoords=text_coords,
+                        color=pt['color'], fontweight='bold', fontsize=ANNOTATION_FONT_SIZE, va='center', ha='left',
+                        annotation_clip=False,
+                        arrowprops=dict(arrowstyle="-", color=pt['color'], alpha=0.4)
+                        if abs(pt['y'] - pt['real_y']) > 1e-9 else None)
+            ax.scatter([2060], [pt['real_y']], color=pt['color'], s=40, zorder=5, clip_on=False)
+
+    if has_data:
+        # Panel (a): labels just right of the plot area
+        annotate_endpoints(ax1, endpoints_ax1, 2061.2, 'data')
+        # Panel (b): EJ axis scaled exactly from the TWh axis (1 TWh = 0.0036 EJ), labels right of its tick labels
+        y0, y1 = ax2.get_ylim()
+        ax2_ej.set_ylim(y0 * 0.0036, y1 * 0.0036)
+        annotate_endpoints(ax2, endpoints_ax2, 1.17, ('axes fraction', 'data'))
+
+    fig.text(0.5, -0.02, "Lines show 5-year centred moving averages of annual model results.",
+             ha='center', va='top', fontsize=LABEL_FONT_SIZE - 2, style='italic', color='dimgrey')
     plt.tight_layout()
+    plt.subplots_adjust(wspace=0.55)
     plt.show()
 
 
