@@ -11,13 +11,23 @@ Usage (run_model_COMPARE_scenarios.ipynb):
 """
 import pandas as pd
 
-CRUDE_EXPORTS_2021_BPD = 6.2e6   # Saudi crude exports 2021, barrels/day (OPEC 2022; JODI 2023)
-EF_T_PER_BBL = 0.43              # combustion emission factor, tCO2 per barrel (U.S. EPA 2024, 2026)
-SAR_PER_USD = 3.75
-OPEC_BASKET_2021_USD = 69.9      # OPEC Reference Basket 2021 average, USD/bbl (OPEC 2022)
-NCV_CRUDE_GJ_PER_T = 42.3        # IPCC 2006 net calorific value of crude oil
-BBL_PER_T = 7.33                 # barrels per tonne of crude (typical)
-IPCC_EF_RANGE_T_PER_TJ = (71.1, 75.5)   # IPCC 2006 95% interval for crude oil (default 73.3)
+# --- Assumptions (paper Section 4.6), with sources ---------------------------------------------------
+# Saudi crude oil exports in 2021: 6.22 million barrels per day (Joint Organisations Data Initiative, JODI,
+# annual average 2021, reported by Arab News, 20 Feb 2022, "Saudi crude oil exports fell in 2021 even as
+# OPEC+ ease output caps"; OPEC Annual Statistical Bulletin 2022, Table 5.5, gives about 6.2 mb/d).
+CRUDE_EXPORTS_2021_BPD = 6.22e6
+# Combustion emission factor of crude oil, U.S. EPA Greenhouse Gas Equivalencies Calculator ("barrels of
+# oil consumed"): 5.80 MMBtu/barrel x 20.31 kg C/MMBtu x 44/12 kg CO2/kg C = 0.432 t CO2 per barrel
+# (EPA, Inventory of U.S. Greenhouse Gas Emissions and Sinks, Annex 2). Heat content is a higher heating value.
+EPA_MMBTU_PER_BBL = 5.80
+EPA_KG_C_PER_MMBTU = 20.31
+EF_T_PER_BBL = EPA_MMBTU_PER_BBL * EPA_KG_C_PER_MMBTU * 44 / 12 / 1000      # = 0.432 tCO2/bbl
+# Checks
+GJ_PER_MMBTU = 1.055056
+NCV_PER_GCV_OIL = 0.95           # net/gross calorific value of oil (IEA/OECD convention)
+IPCC_EF_RANGE_T_PER_TJ = (71.1, 75.5)   # IPCC 2006 Guidelines, Vol. 2, Table 1.4: crude oil 73.3 (71.1-75.5) tCO2/TJ (NCV)
+SAR_PER_USD = 3.75               # fixed exchange rate (Saudi Central Bank)
+OPEC_BASKET_2021_USD = 69.89     # OPEC Reference Basket, 2021 average, USD/bbl (OPEC Annual Statistical Bulletin 2022)
 YEARS_T = list(range(1, 41))     # t = 1..40 is 2021..2060
 CRUDE = 'Extraction of crude petroleum and natural gas'
 
@@ -36,19 +46,21 @@ def _mean_runs(runs, f):
 def check_assumptions(exp_reports):
     """Print a check of the assumptions of Section 4.6 against the model and the literature."""
     report = next(iter(exp_reports.values()))[0]
-    ef_model = report['parameters_calibrated'].oil_emission_factor * 1e6       # tCO2/GJ
-    gj_per_bbl = NCV_CRUDE_GJ_PER_T / BBL_PER_T
-    lo, hi = (x / 1000 * gj_per_bbl for x in IPCC_EF_RANGE_T_PER_TJ)
+    ef_model = report['parameters_calibrated'].oil_emission_factor * 1e6 * 1000  # tCO2/TJ (NCV)
+    gj_hhv_per_bbl = EPA_MMBTU_PER_BBL * GJ_PER_MMBTU
+    ef_epa_ncv = EF_T_PER_BBL / (gj_hhv_per_bbl * NCV_PER_GCV_OIL) * 1000      # tCO2/TJ (NCV)
+    lo, hi = IPCC_EF_RANGE_T_PER_TJ
     ex, p = _crude(report)
     barrels_2021 = CRUDE_EXPORTS_2021_BPD * 365
     usd_per_bbl = ex.loc[1] / p.loc[1] * 1000 / SAR_PER_USD / barrels_2021
-    print('ASSUMPTION CHECK')
-    print(f'  Model oil emission factor (IPCC Tier 1): {ef_model * 1000:.1f} tCO2/TJ')
-    print(f'  {EF_T_PER_BBL} tCO2/bbl implies {EF_T_PER_BBL / ef_model:.2f} GJ/bbl; crude oil has about {gj_per_bbl:.2f} GJ/bbl (NCV)')
-    print(f'  IPCC 95% range: {lo:.3f}-{hi:.3f} tCO2/bbl -> {EF_T_PER_BBL} is '
-          f'{"inside" if lo <= EF_T_PER_BBL <= hi else "OUTSIDE"} the range')
-    print(f'  Implied 2021 export unit value: {usd_per_bbl:.1f} USD/bbl (OPEC basket 2021: {OPEC_BASKET_2021_USD} USD/bbl)')
-    print(f'  Exported crude 2021: {barrels_2021 * EF_T_PER_BBL / 1e9:.2f} GtCO2\n')
+    ok = lambda c: 'OK' if c else 'CHECK'
+    print('ASSUMPTION CHECK (paper Section 4.6)')
+    print(f'  Crude exports 2021: {CRUDE_EXPORTS_2021_BPD / 1e6:.2f} million bbl/day (JODI) = {barrels_2021 / 1e9:.2f} billion bbl')
+    print(f'  Emission factor: {EF_T_PER_BBL:.3f} tCO2/bbl (EPA) = {ef_epa_ncv:.1f} tCO2/TJ on a net-calorific basis; '
+          f'IPCC 2006: 73.3 ({lo}-{hi}); model: {ef_model:.1f}  [{ok(lo <= ef_epa_ncv <= hi)}]')
+    print(f'  Implied 2021 export unit value: {usd_per_bbl:.1f} USD/bbl; OPEC basket 2021: {OPEC_BASKET_2021_USD} USD/bbl  '
+          f'[{ok(abs(usd_per_bbl / OPEC_BASKET_2021_USD - 1) < 0.05)}]')
+    print(f'  Emissions of exported crude, 2021: {barrels_2021 * EF_T_PER_BBL / 1e9:.2f} GtCO2\n')
 
 
 def embodied_emissions_table(exp_reports, check=True):
