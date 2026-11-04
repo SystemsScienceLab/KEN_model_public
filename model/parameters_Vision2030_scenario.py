@@ -321,7 +321,7 @@ class ModelParameters:
             vision_2030_target_CCU_SGI_Carbon =     True,     # Toggle for the specific Vision 2030 target implementation.
             net_emission_reduction_green_investments_exports_transformation = False,  # Set to True to run the Net Zero 2060 pathway
             vision_2030_renewable_target =          True,      # Set to True for the Vision 2030 scenario, False for the trend scenario
-            gRE_trend_rate =                        0.154,          # Annual renewable growth rate for the trend scenario.
+            gRE_trend_rate =                        0.154,          # No longer used: trend renewables now grow linearly (calibration.py, re_trend_annual_addition_gj).
             energy_sector_public_share =            0.8,        # 0.8 (80% public ownership of the energy sector in KSA); set to 0.5 for a more socialized energy sector
             enable_targeted_oil_reduction =         True,      # Oil reduction according to V2030, 95% until 2030 for three sectors (industries, power plant, desalination)
             oil_reduction_target_pct =              0.95,

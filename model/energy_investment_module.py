@@ -60,7 +60,7 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
     ########################################################################################################################################################################################################################
     electrification_load_gj = 0.0
     
-    if p.enable_industrial_electrification and t > 1:
+    if p.enable_industrial_electrification and t >= pc.policy_start_t:
         # 1. Identify Target Sectors
         target_indices = pc.electrification_target_sectors
         
@@ -119,12 +119,12 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
     # 2b. Required renewable energy investment (segregated by technology)
     ########################################################################################################################################################################################################################
     
-    if t <= 1:
-        # --- HISTORICAL OVERRIDE (t=1: 2021) ---
+    if t <= pc.hist_power_last_t:
+        # --- HISTORICAL OVERRIDE (t = 1..5: 2021-2025, Ember / Energy Institute; calibration.py VIII) ---
         target_RE_generation = (
-            pc.hist_elec_solar_gj[t-1] +  
-            pc.hist_elec_wind_gj[t-1] +   
-            pc.hist_elec_bio_gj[t-1]
+            pc.hist_power_solar_gj[t-1] +
+            pc.hist_power_wind_gj[t-1] +
+            pc.hist_power_bio_gj[t-1]
         )
         
         v.k_re_physical[t] = target_RE_generation
@@ -137,9 +137,9 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
         hist_total = target_RE_generation if target_RE_generation > 0 else 1.0
         
         # Calculate specific investment for each tech
-        v.I_solar[t] = (new_capacity_needed * (pc.hist_elec_solar_gj[t-1]/hist_total)) * pc.capex_solar_per_gj
-        v.I_wind[t]  = (new_capacity_needed * (pc.hist_elec_wind_gj[t-1]/hist_total)) * pc.capex_wind_per_gj
-        v.I_bio[t]   = (new_capacity_needed * (pc.hist_elec_bio_gj[t-1]/hist_total)) * pc.capex_bio_per_gj
+        v.I_solar[t] = (new_capacity_needed * (pc.hist_power_solar_gj[t-1]/hist_total)) * pc.capex_solar_per_gj
+        v.I_wind[t]  = (new_capacity_needed * (pc.hist_power_wind_gj[t-1]/hist_total)) * pc.capex_wind_per_gj
+        v.I_bio[t]   = (new_capacity_needed * (pc.hist_power_bio_gj[t-1]/hist_total)) * pc.capex_bio_per_gj
         
         v.I_RE[t] = v.I_solar[t] + v.I_wind[t] + v.I_bio[t]
 
@@ -193,7 +193,8 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
             
             target_RE_generation = base_grid_demand * current_target_share
         else:
-            target_RE_generation = v.renewable_energy_generation[t-1] * (1 + p.gRE_trend_rate)
+            # Trend: linear continuation of the 2023-2025 pace (calibration.py, section VIII)
+            target_RE_generation = v.renewable_energy_generation[t-1] + pc.re_trend_annual_addition_gj
         # C. Add Electrification Load
         if p.enable_industrial_electrification:
             target_RE_generation += v.electrification_added_load[t]
@@ -237,14 +238,14 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
     # 3. Hydrogen investment 
     ########################################################################################################################################################################################################################    
     if p.enable_green_hydrogen:
-        if t <= 1:
+        if t < pc.policy_start_t:
             v.k_hydrogen_physical[t] = 0
             v.I_hydrogen[t] = 0
         else:
-            # 1. Define Target Capacity (Ramp up to 2030)
+            # 1. Define Target Capacity (Ramp up to 2030, from the policy start)
             target_year_idx = 10 
             if t <= target_year_idx:
-                fraction = (t - 1) / (target_year_idx - 1)
+                fraction = (t - pc.policy_start_t + 1) / (target_year_idx - pc.policy_start_t + 1)
                 target_capacity = p.hydrogen_target_2030_gj * fraction
             else:
                 target_capacity = v.k_hydrogen_physical[t-1] * 1.05 
@@ -265,20 +266,15 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
     ########################################################################################################################################################################################################################
     # 4. Net zero investments (CCS, Nature-based, CCU)
     ########################################################################################################################################################################################################################
-    if p.net_emission_reduction_green_investments_exports_transformation:
+    if p.net_emission_reduction_green_investments_exports_transformation and t >= pc.policy_start_t:
 
         # --- A. CCS INVESTMENT (Hard-to-Abate Industry) ---
         ccs_target_year = 15 # Target year index (e.g., 2035)
-        
-        if t <= ccs_target_year:
-            # Linear ramp up to target
-            ccs_capacity_needed = (p.CCS_capacity_target_2035 / ccs_target_year) * t
-        else:
-            # Maintain capacity (or slight growth)
-            ccs_capacity_needed = p.CCS_capacity_target_2035
-            
+        # Linear ramp from the policy start to the target; same path as the CCS flow in energy_module.py
+        ccs_ramp_years = ccs_target_year - pc.policy_start_t + 1
+        ccs_capacity_needed = p.CCS_capacity_target_2035 * min(1.0, (t - pc.policy_start_t + 1) / ccs_ramp_years)
         # Calculate annual addition (Delta)
-        ccs_prev = (p.CCS_capacity_target_2035 / ccs_target_year) * (t-1) if t > 1 else 0
+        ccs_prev = p.CCS_capacity_target_2035 * min(1.0, max(0, t - pc.policy_start_t) / ccs_ramp_years)
         ccs_added = np.maximum(0, ccs_capacity_needed - ccs_prev)
         
         # COST CALCULATION:
@@ -354,7 +350,7 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
     ########################################################################################################################################################################################################################
     # 5. Energy efficiency investment
     ########################################################################################################################################################################################################################
-    if p.enable_energy_efficiency_gains:
+    if p.enable_energy_efficiency_gains and t >= pc.policy_start_t:
         # 1. Determine the Targeted Efficiency Gain % for this year (Sectors)
         # This matches the logic that WILL happen in energy_module later
         efficiency_gains = np.zeros(pc.S)
@@ -396,7 +392,7 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
     # We calculated the physical load at the top of the function. 
     # Now we calculate the cost of the industrial equipment (not the grid).
     
-    if p.enable_industrial_electrification and t > 1:
+    if p.enable_industrial_electrification and t >= pc.policy_start_t:
         # Re-calculate the GJ switched to apply the cost factor
         # Load (Elec) * COP = Original Fossil Energy Switched
         cop = getattr(p, 'electrification_cop', 2.5)
@@ -414,7 +410,7 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
     # Timeline: Start 2025 -> 10% Coverage by 2030 -> 100% Coverage by 2060
     # Localization: 100% Import initially -> Local production starts after 2030
     
-    if p.net_emission_reduction_green_investments_exports_transformation and t > 1:
+    if p.net_emission_reduction_green_investments_exports_transformation and t >= pc.policy_start_t:
         # 1. Calculate Target Capacity (Physical GJ)
         # ----------------------------------------------------
         # Convert Annual Gen (GJ) to Daily Avg (GJ/day)
