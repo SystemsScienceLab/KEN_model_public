@@ -158,6 +158,7 @@ class ModelParameters:
     CCU_growth_rate: float                  # Annual growth of CCU capacity
     # 3. Remove (CCS & Nature)
     CCS_capacity_target_2035: float         # Target CCS capacity (Mt)
+    afforestation_case: str               # 'irrigated' (lower bound, default) or 'native_rainfed' (upper bound); energy_module.py
     CCS_cost_per_tonne: float               # Cost per tonne of CCS (SAR)
     nature_based_removal_target: float      # Target removal from Nature (Mt)
     # 4. Carbon Market
@@ -407,6 +408,8 @@ class ModelParameters:
             CCU_growth_rate = 0.02,                 # 2% annual growth
 
             CCS_capacity_target_2035 = 44.0,        # 44 Mt target
+
+            afforestation_case = 'irrigated',       # Lower bound: all trees irrigated for life with leftover reclaimed wastewater. Upper bound: 'native_rainfed'.
             CCS_cost_per_tonne = 350.0,             # Approx (69+25)*3.75
             nature_based_removal_target = 278.0,    # 278 Mt (SGI target)
 

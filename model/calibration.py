@@ -26,7 +26,12 @@ class ParametersCalibrated:
     # Common scaling factor for the oil and gas intensities of all non-power sectors, fitted so that
     # national energy CO2 in the Baseline scenario matches the Energy Institute series 2021-2025 (least
     # squares; see section 5.5b and model/calibrate_national_co2_factor.py, which recomputes it).
-    NATIONAL_CO2_SCALING_FACTOR = 0.913
+    NATIONAL_CO2_SCALING_FACTOR = 0.924
+
+    # Common scaling factor for the electricity intensities of all sectors, fitted so that sectoral
+    # electricity demand in the Baseline scenario equals observed generation in 2025 (section 5.5b (d);
+    # recomputed by model/calibrate_national_co2_factor.py). Same value in all scenarios.
+    ELECTRICITY_SCALING_FACTOR = 1.493
 
 
 
@@ -1060,10 +1065,47 @@ class ParametersCalibrated:
         self.gas_intensities_ = self.gas_intensities_gcam_.copy()
         self.oil_intensities_[non_power_] *= self.national_co2_scaling_factor
         self.gas_intensities_[non_power_] *= self.national_co2_scaling_factor
-        # Electricity intensities as loaded; scaled in energy_module.py in the last historical year
-        # (2025) so that sectoral electricity demand continues from the observed generation.
+        # (d) Scale the electricity intensities of all sectors by one common factor, so that sectoral
+        # electricity demand equals observed generation in the last historical year (2025) and demand
+        # continues from the observed level in 2026. Like the factor in (c) it is fitted on the Baseline
+        # scenario and is the same in all scenarios (ELECTRICITY_SCALING_FACTOR, recomputed by
+        # model/calibrate_national_co2_factor.py). Before November 2026 it was recomputed inside every
+        # run (energy_module.py), which gave each scenario its own intensities (1.48 Baseline, 1.38
+        # Vision 2030, 1.42 Transformation): a scenario with higher output in 2025 received lower
+        # electricity intensities for all later years. Applied here, before sections 5.7 and 5.8, so that
+        # the efficiency tiers and costs use the same electricity quantities as the model run.
         self.electricity_intensities_gcam_ = self.electricity_intensities_.copy()
-        self.electricity_scaling_factor = 1.0  # set in energy_module.py at t == hist_power_last_t
+        self.electricity_scaling_factor = ParametersCalibrated.ELECTRICITY_SCALING_FACTOR
+        self.electricity_intensities_ = self.electricity_intensities_gcam_ * self.electricity_scaling_factor
+        # (e) Process and other non-combustion emissions (added November 2026).
+        # Defined as the residual between the official national total and the combustion CO2 the model
+        # accounts for: 716.1 MtCO2e (2021, excluding LULUCF; Kingdom of Saudi Arabia, First Biennial
+        # Transparency Report, National GHG Inventory Document, submitted to the UNFCCC in March 2025,
+        # Table 1; CO2, CH4 and N2O, AR5 global warming potentials) minus the 2021 energy CO2 in (b).
+        # The residual is allocated to sectors with the inventory's own non-combustion items for 2021
+        # (same report, Gg CO2e): mineral industry 30,025 (Table 11), chemical industry 38,030 (Table 12),
+        # metal industry 15,032 (Table 13), other industrial processes 1,183 (IPPU total 84,270 minus the
+        # three), fugitive emissions from oil and gas 17,312 (Table 10), agriculture 9,205 and waste 44,110
+        # (Table 1; of which wastewater 25,600, the rest solid waste). These items sum to 154.9 Mt; they
+        # are scaled by one factor to the residual. energy_module.py keeps each sector's emissions
+        # proportional to its real output (2021 prices). Set official_total_ghg_2021_mt to None to
+        # switch process emissions off.
+        self.official_total_ghg_2021_mt = 716.1
+        process_items_gg_ = {
+            'Manufacture of other non-metallic mineral products': 30025.0,
+            'Manufacture of chemicals and chemical products': 38030.0 + 1183.0,
+            'Manufacture of basic metals': 15032.0,
+            'Extraction of crude petroleum and natural gas': 17312.0,
+            'Crop and animal production, hunting and related service activities': 9205.0,
+            'Sewerage': 25600.0,
+            'Waste collection, treatment and disposal activities; materials recovery': 44110.0 - 25600.0,
+        }
+        self.process_emissions_2021_mt_ = np.zeros(len(self.sectors))
+        if self.official_total_ghg_2021_mt is not None:
+            residual_mt_ = self.official_total_ghg_2021_mt - self.national_energy_co2_hist_mt[2021]
+            items_total_gg_ = sum(process_items_gg_.values())
+            for name_, gg_ in process_items_gg_.items():
+                self.process_emissions_2021_mt_[self.sectors.index(name_)] = residual_mt_ * gg_ / items_total_gg_
         if verbose:
             print("--- Power-plant efficiency and national CO2 calibration (2021) ---")
             print(f"  Efficiency oil / gas: {self.power_plant_efficiency_oil:.2f} / {self.power_plant_efficiency_gas:.2f}")

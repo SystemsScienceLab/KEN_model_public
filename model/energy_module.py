@@ -13,9 +13,10 @@
 import matplotlib.pyplot as plt
 from .model_classes import ModelConfig, ModelVariables, ModelResults, ModelParameters
 from .calibration import ParametersCalibrated
+from .utils import real_output_2021_prices
 import numpy as np
 import pandas as pd
-from dataclasses import fields 
+from dataclasses import fields
 import seaborn as sns 
 import warnings
 
@@ -66,118 +67,59 @@ def sgi_historical(t: int):
     return planted_t, seq_mt
 
 
-# Irrigation of the afforested area by tree type (water for mitigation, PART 6 below).
-# - City and roadside trees (e.g. Green Riyadh) are irrigated permanently with treated wastewater. Their
-#   water use keeps the model's original intensity WI_SGI_BM3_PER_MT (0.315 billion m3 per Mt CO2), i.e.
-#   3.15 m3 per mature tree and year at 10 kg CO2 per tree, rising with tree maturity.
-# - Native rangeland and valley species (e.g. Acacia, Ziziphus) are planted under the nature-based phase
-#   of the SGI roadmap (2024-2030, "sustainable irrigation", native species; SGI, "Saudi Arabia unveils
-#   roadmap to reach its 10 billion tree target", 9 Oct 2023). They are irrigated only while they
-#   establish: 1 m3 per tree and year in the first 3 years (assumption: about 10-20 litres per week),
-#   then they depend on rainfall and water harvesting (0 m3).
-# - Mangroves grow on seawater: no irrigation (SGI_MANGROVES_PLANTED_MILLION).
-# Share of city trees among the irrigated (non-mangrove) trees. No national split is published. Green
-# Riyadh plans 7.5 million trees by 2030, all irrigated with recycled wastewater (Royal Commission for
-# Riyadh City, Green Riyadh Program; AIPH, "Riyadh, Saudi Arabia: Treated Irrigation Water Network";
-# SPA, 9 Jul 2023, "1350 km of water pipes to irrigate 7.5 million trees in Riyadh"), i.e. 1.3% of the
-# SGI target of 600 million trees by 2030 (SGI, 9 Oct 2023). Riyadh has about a quarter of the urban
-# population; scaling it to all cities gives about 5%. Estimate; test 0.02-0.10 in sensitivity runs.
-SGI_CITY_TREE_SHARE = 0.05
-SGI_WATER_CITY_M3_PER_MATURE_TREE = WI_SGI_BM3_PER_MT * SGI_MT_CO2_PER_BILLION_TREES   # = 3.15 m3/yr
-SGI_WATER_RANGELAND_ESTABLISH_M3 = 1.0     # m3 per tree and year during establishment
-SGI_RANGELAND_ESTABLISH_YEARS = 3
-
-# Planting plan after 2025 (Vision 2030 and Transformation). A tree reaches full uptake in its fifth year,
-# so each year's planting is set by the target uptake SGI_PLANNING_LEAD_YEARS ahead. A gap between that
-# target and the future uptake of the trees already planted is closed over SGI_GAP_CLOSING_YEARS, not in
-# one year, and annual planting falls by at most SGI_MAX_PLANTING_DECLINE per year (a nursery and
-# planting programme winds down gradually; the 2025 SGI planting rate is the starting point). This
-# gives a smooth planting path without one-year bursts; new planting stays limited by the leftover
-# wastewater (net zero logic below). Modelling assumptions, not SGI data.
-SGI_PLANNING_LEAD_YEARS = 4
-SGI_GAP_CLOSING_YEARS = 3
-SGI_MAX_PLANTING_DECLINE = 1.0 / 3.0
-SGI_WATER_PLANNING_YEARS = 5   # years of leftover wastewater averaged for the planting limit
+# ---------------------------------------------------------------------------------------------------
+# Afforestation (Saudi Green Initiative): two cases, selected by p.afforestation_case (November 2026)
+# ---------------------------------------------------------------------------------------------------
+# A tree fixes carbon only while it transpires water. The model therefore keeps ONE water requirement
+# per tonne of CO2 for all trees, WI_SGI_BM3_PER_MT = 0.315 billion m3 per Mt CO2 (3.15 m3 per tree and
+# year at 10 kg CO2 per tree), whatever the source of the water (irrigation, rainfall, runoff or
+# groundwater). Check: mature Acacia tortilis in the Sahel transpires about 29 litres per day (about
+# 10 m3 per year) from soil water and a water table at 31 m (Do et al. 2008, Tree Physiology 28, 95-104),
+# so 3.15 m3 per year is a low water use for a tree that takes up 10 kg CO2 per year.
+#
+# 'irrigated' (lower bound; default and main run of the paper): all trees are irrigated for life with
+#   reclaimed urban wastewater that other users do not already reuse. Uptake is the policy target or
+#   what this leftover wastewater can irrigate, whichever is lower. No desalinated water and no
+#   groundwater is used for trees. Mangroves grow on seawater and need no irrigation.
+# 'native_rainfed' (upper bound): in addition, native trees and shrubs (e.g. Acacia, Ziziphus) are
+#   established on restored rangeland with grazing management. After establishment they live on
+#   harvested rainfall and runoff, which in practice includes the shallow groundwater that runoff
+#   recharges. Their number is limited by that water, not by planting:
+#     restored area (million ha)  x  rainfall (m3 per ha)  x  share usable by trees  /  0.315
+#   This rain-fed water use is reported in v.water_use_nbs_rainfed and is NOT part of the national
+#   (blue) water balance. During establishment the seedlings are irrigated with reclaimed wastewater,
+#   which they take from the same leftover pool as the irrigated trees.
+# In every run both cases are computed: v.flow_remove_nature is the case selected by the parameter,
+# v.flow_remove_nature_upper always reports the 'native_rainfed' case (for the uncertainty band).
+#
+# Parameters of the upper bound (assumptions with their basis; test the ranges in sensitivity runs):
+# - Restored rangeland: 1 million ha in 2025 (Saudi Press Agency, 27 Mar 2026, first million hectares
+#   restored), rising linearly to the SGI long-term target of 40 million ha in 2060.
+SGI_RESTORED_AREA_2025_MHA = 1.0
+SGI_RESTORED_AREA_2060_MHA = 40.0
+# - Mean annual rainfall on restored land: 80 mm = 800 m3 per ha (national mean is below 100 mm; range 60-110).
+SGI_RAINFALL_M3_PER_HA = 800.0
+# - Share of that rainfall which trees can use with water harvesting (run-on sites, wadis, small dams);
+#   the rest evaporates or runs off. 10% (range 5-20%). The most uncertain parameter.
+SGI_RAIN_SHARE_USABLE = 0.10
+# - Rain-fed native trees: 8 kg CO2 per tree and year, the lower end of the 8-12 kg band used for
+#   irrigated trees (Habib et al. 2019); 50% of the seedlings survive (irrigated field trials in central
+#   Saudi Arabia report 35-79% transplant survival depending on irrigation); seedlings receive 1 m3 of
+#   reclaimed wastewater per year for 3 years.
+SGI_NATIVE_KG_CO2_PER_TREE = 8.0
+SGI_NATIVE_SURVIVAL = 0.5
+SGI_ESTABLISH_M3_PER_TREE_YEAR = 1.0
+SGI_ESTABLISH_YEARS = 3
+SGI_MATURITY_YEARS = 5      # a tree reaches full uptake in its fifth year (20% per year)
 
 
 def sgi_intended_sequestration_mt(t: float, min_2060_mt: float, max_2060_mt: float) -> float:
     """Scenario target for afforestation uptake in year t (Mt CO2): mean of the min and max paths,
-    rising with the square of time from 2021 to the 2060 values. After 2060 the same trend is used
-    for the planting plan only (trees planted up to 2060 grow into the years after 2060)."""
-    fraction = (t - 1) / 39.0                       # 39 years from 2021 to 2060
+    rising with the square of time from 2021 to the 2060 values."""
+    fraction = min(1.0, (t - 1) / 39.0)             # 39 years from 2021 to 2060
     min_seq = 0.2 + (min_2060_mt - 0.2) * fraction ** 2
     max_seq = 2.0 + (max_2060_mt - 2.0) * fraction ** 2
     return (min_seq + max_seq) / 2.0
-
-
-def sgi_planned_planting_bn(v: ModelVariables, t: int, min_2060_mt: float, max_2060_mt: float) -> float:
-    """Trees to plant in year t (billion) before the wastewater limit (see SGI_PLANNING_LEAD_YEARS)."""
-    t_ahead = t + SGI_PLANNING_LEAD_YEARS
-    uptake_ahead = sum(v.sgi_trees_planted_avg[j] * _tree_maturity(t_ahead - j) * SGI_MT_CO2_PER_BILLION_TREES
-                       for j in range(0, t - 1))
-    gap_mt = max(0.0, sgi_intended_sequestration_mt(t_ahead, min_2060_mt, max_2060_mt) - uptake_ahead)
-    planting_gap = gap_mt / (SGI_MT_CO2_PER_BILLION_TREES * SGI_GAP_CLOSING_YEARS)
-    planting_last_year = v.sgi_trees_planted_avg[t - 2]
-    return max(planting_gap, planting_last_year * (1.0 - SGI_MAX_PLANTING_DECLINE))
-
-
-def _tree_maturity(age: int) -> float:
-    """Share of full CO2 uptake at a given age (1 = planting year): 20% per year, full from year 5."""
-    return min(0.2 * age, 1.0)
-
-
-def sgi_mangroves_planted_bn(t_planted: int) -> float:
-    """Mangroves planted in model year t_planted (billion trees)."""
-    return SGI_MANGROVES_PLANTED_MILLION.get(2020 + t_planted, 0.0) / 1000.0
-
-
-def sgi_forest_uptake_existing_mt(v: ModelVariables, t: int) -> float:
-    """CO2 uptake in year t (Mt) of all trees planted in earlier years (v.sgi_trees_planted_avg)."""
-    if not hasattr(v, 'sgi_trees_planted_avg'):
-        return 0.0
-    return sum(v.sgi_trees_planted_avg[j] * _tree_maturity(t - j) * SGI_MT_CO2_PER_BILLION_TREES
-               for j in range(0, t - 1))
-
-
-def sgi_forest_water_m3(v: ModelVariables, t: int, include_current_year: bool = True) -> float:
-    """Irrigation water of the afforested area in year t (m3), by planting year and tree type."""
-    if not hasattr(v, 'sgi_trees_planted_avg'):
-        return 0.0
-    last_j = t if include_current_year else t - 1
-    water = 0.0
-    for j in range(0, last_j):                 # trees planted in model year j + 1
-        age = t - j
-        irrigated_bn = max(0.0, v.sgi_trees_planted_avg[j] - sgi_mangroves_planted_bn(j + 1))
-        water += SGI_CITY_TREE_SHARE * irrigated_bn * _tree_maturity(age) * SGI_WATER_CITY_M3_PER_MATURE_TREE
-        if age <= SGI_RANGELAND_ESTABLISH_YEARS:
-            water += (1 - SGI_CITY_TREE_SHARE) * irrigated_bn * SGI_WATER_RANGELAND_ESTABLISH_M3
-    return water * 1e9
-
-
-def sgi_water_limited_planting_bn(v: ModelVariables, t: int, avail_for_sgi_m3: float) -> float:
-    """Largest planting rate (billion trees per year) the leftover wastewater can sustain in year t.
-    Rangeland trees need water for SGI_RANGELAND_ESTABLISH_YEARS years, so a constant planting rate N
-    keeps about N * SGI_RANGELAND_ESTABLISH_YEARS cohorts under establishment irrigation; city trees
-    planted earlier keep their (maturity-based) irrigation. Budgeting for the whole establishment period,
-    instead of for the planting year only, avoids a 3-year stop-and-go cycle of planting when the
-    wastewater limit binds. The leftover wastewater (from the water module) can change a lot from one
-    year to the next; planting is planned on its mean over the last SGI_WATER_PLANNING_YEARS years
-    (a shortfall in a single year is met by desalination and groundwater, PART 6 below)."""
-    if not hasattr(v, 'sgi_water_avail_m3'):
-        v.sgi_water_avail_m3 = np.full(len(v.emissions_gross_total), np.nan)
-    v.sgi_water_avail_m3[t] = avail_for_sgi_m3
-    recent = v.sgi_water_avail_m3[max(0, t - SGI_WATER_PLANNING_YEARS + 1): t + 1]
-    avail_for_sgi_m3 = float(np.nanmean(recent))
-    city_water_m3 = 0.0
-    if hasattr(v, 'sgi_trees_planted_avg'):
-        for j in range(0, t - 1):
-            irrigated_bn = max(0.0, v.sgi_trees_planted_avg[j] - sgi_mangroves_planted_bn(j + 1))
-            city_water_m3 += (SGI_CITY_TREE_SHARE * irrigated_bn * _tree_maturity(t - j) *
-                              SGI_WATER_CITY_M3_PER_MATURE_TREE * 1e9)
-    water_per_bn_trees_m3 = 1e9 * ((1 - SGI_CITY_TREE_SHARE) * SGI_WATER_RANGELAND_ESTABLISH_M3 *
-                                   SGI_RANGELAND_ESTABLISH_YEARS +
-                                   SGI_CITY_TREE_SHARE * 0.2 * SGI_WATER_CITY_M3_PER_MATURE_TREE)
-    return max(0.0, avail_for_sgi_m3 - city_water_m3) / water_per_bn_trees_m3
 
 
 def sgi_mangrove_uptake(t: int) -> float:
@@ -185,6 +127,93 @@ def sgi_mangrove_uptake(t: int) -> float:
     as sgi_historical. This part of the forest needs no irrigation water."""
     return sum(n_million / 1000.0 * min(0.2 * (t - (year - 2020) + 1), 1.0) * SGI_MT_CO2_PER_BILLION_TREES
                for year, n_million in SGI_MANGROVES_PLANTED_MILLION.items() if t >= year - 2020)
+
+
+def sgi_native_capacity_mt(t: int) -> float:
+    """Uptake (Mt CO2) that rain-fed native trees can sustain in year t in the upper-bound case: the
+    usable rainfall on the restored area divided by the water need per tonne of CO2. The area of
+    SGI_MATURITY_YEARS - 1 years earlier is used, because trees reach full uptake in their fifth year."""
+    t_area = t - (SGI_MATURITY_YEARS - 1)
+    if t_area < 5:                                   # no restored area counted before 2025
+        return 0.0
+    area_mha = SGI_RESTORED_AREA_2025_MHA + (SGI_RESTORED_AREA_2060_MHA - SGI_RESTORED_AREA_2025_MHA) * min(1.0, (t_area - 5) / 35.0)
+    usable_water_m3 = area_mha * 1e6 * SGI_RAINFALL_M3_PER_HA * SGI_RAIN_SHARE_USABLE
+    return usable_water_m3 / (WI_SGI_BM3_PER_MT * 1e9)
+
+
+def afforestation(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrated, t: int,
+                  min_2060_mt: float, max_2060_mt: float):
+    """Afforestation uptake in year t for both cases (see the block comment above).
+    Returns (uptake of the selected case, uptake of the upper-bound case), in Mt CO2, and stores the
+    irrigation water in v._sgi_irrigation_m3[t] and the rain-fed water use in v.water_use_nbs_rainfed[t]."""
+    if not hasattr(v, '_sgi_irrigation_m3'):
+        n = len(v.emissions_gross_total)
+        v._sgi_irrigation_m3 = np.zeros(n)
+        v._sgi_native_uptake_mt = np.zeros(n)
+    # Policy target; the forest planted under the SGI in 2021-2025 keeps maturing and is the floor
+    if min_2060_mt is None:                          # historical years: the trees actually planted
+        target_mt = sgi_historical(t)[1]
+    else:
+        target_mt = max(sgi_intended_sequestration_mt(t, min_2060_mt, max_2060_mt), sgi_historical(t)[1])
+    mangrove_mt = min(sgi_mangrove_uptake(t), target_mt)
+    # Reclaimed wastewater left after the reuse sector's deliveries to other users and after the other
+    # mitigation uses (solar, wind, hydrogen, electrification, CCS, CCU)
+    avail_m3 = max(0.0, wastewater_available_for_nexus(v, t) - nexus_water_other_m3(v, pc, t))
+
+    # --- Case 'irrigated' (lower bound) ---
+    irrigated_low_mt = min(target_mt - mangrove_mt, avail_m3 / (WI_SGI_BM3_PER_MT * 1e9))
+    uptake_low = mangrove_mt + irrigated_low_mt
+
+    # --- Case 'native_rainfed' (upper bound) ---
+    native_mt = min(max(0.0, target_mt - mangrove_mt), sgi_native_capacity_mt(t)) if t >= pc.policy_start_t else 0.0
+    native_prev = v._sgi_native_uptake_mt[t-1]
+    native_mt = max(native_mt, native_prev)          # established trees stay
+    v._sgi_native_uptake_mt[t] = native_mt
+    # Seedlings planted for the trees that reach full uptake SGI_MATURITY_YEARS - 1 years from now:
+    # approximated by the current annual increase of the native stock, divided by survival
+    new_native_bn = max(0.0, native_mt - native_prev) * 1e9 / SGI_NATIVE_KG_CO2_PER_TREE / 1e9 / SGI_NATIVE_SURVIVAL
+    if not hasattr(v, '_sgi_native_planted_bn'):
+        v._sgi_native_planted_bn = np.zeros(len(v.emissions_gross_total))
+    v._sgi_native_planted_bn[t] = new_native_bn
+    establish_m3 = float(np.sum(v._sgi_native_planted_bn[max(0, t - SGI_ESTABLISH_YEARS + 1): t + 1])) * 1e9 * SGI_ESTABLISH_M3_PER_TREE_YEAR
+    establish_m3 = min(establish_m3, avail_m3)
+    irrigated_up_mt = min(max(0.0, target_mt - mangrove_mt - native_mt), (avail_m3 - establish_m3) / (WI_SGI_BM3_PER_MT * 1e9))
+    uptake_up = mangrove_mt + native_mt + irrigated_up_mt
+
+    if getattr(p, 'afforestation_case', 'irrigated') == 'native_rainfed':
+        v._sgi_irrigation_m3[t] = irrigated_up_mt * WI_SGI_BM3_PER_MT * 1e9 + establish_m3
+        v.water_use_nbs_rainfed[t] = native_mt * WI_SGI_BM3_PER_MT * 1e9
+        return uptake_up, uptake_up
+    v._sgi_irrigation_m3[t] = irrigated_low_mt * WI_SGI_BM3_PER_MT * 1e9
+    # Reported for information: the rain-fed water the upper-bound case would use
+    v.water_use_nbs_rainfed[t] = native_mt * WI_SGI_BM3_PER_MT * 1e9
+    return uptake_low, uptake_up
+
+
+def trees_planted_accounting(v: ModelVariables, t: int):
+    """Trees planted per year (billion) that give the uptake v.flow_remove_nature[t], with the 5-year
+    maturity rule, for 10 kg CO2 per tree (avg) and for the 12 kg (min) and 8 kg (max) band."""
+    if not hasattr(v, 'sgi_trees_planted_avg'):
+        v.sgi_trees_planted_avg = np.zeros(len(v.emissions_gross_total))
+        v.sgi_trees_planted_min = np.zeros(len(v.emissions_gross_total))
+        v.sgi_trees_planted_max = np.zeros(len(v.emissions_gross_total))
+
+    def get_req_trees(P_array, current_t, target_co2_mt, rate_mt_per_billion):
+        existing_co2 = 0.0
+        for j in range(0, current_t - 1):
+            age = current_t - j
+            mult = 0.2 * age if age <= 5 else 1.0
+            existing_co2 += P_array[j] * mult * rate_mt_per_billion
+        shortfall = max(0.0, target_co2_mt - existing_co2)
+        return shortfall / (0.2 * rate_mt_per_billion)
+
+    v.sgi_trees_planted_avg[t-1] = get_req_trees(v.sgi_trees_planted_avg, t, v.flow_remove_nature[t], 10.0)
+    v.sgi_trees_planted_min[t-1] = get_req_trees(v.sgi_trees_planted_min, t, v.flow_remove_nature[t], 12.0)
+    v.sgi_trees_planted_max[t-1] = get_req_trees(v.sgi_trees_planted_max, t, v.flow_remove_nature[t], 8.0)
+    v.sgi_trees_planted_avg[t] = v.sgi_trees_planted_avg[t-1]
+    v.sgi_trees_planted_min[t] = v.sgi_trees_planted_min[t-1]
+    v.sgi_trees_planted_max[t] = v.sgi_trees_planted_max[t-1]
+
 
 
 def wastewater_recovery_rate(t: int) -> float:
@@ -240,20 +269,19 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
     # 2. Calculate Energy Demand (Historical Trend Logic)
     ########################################################################
     
-    # --- Electricity demand calibration (calibration.py, sections 5.5b and VIII) ---
-    # In the last historical year (2025), scale the sectoral electricity intensities by one common
-    # factor so that sectoral electricity demand equals the observed generation. From 2026, demand
-    # then continues from the observed level instead of falling back to the lower level implied by the
-    # loaded (GCAM) intensities. Rebuilt from the loaded intensities, so repeated runs do not compound.
-    if t == pc.hist_power_last_t:
-        elec_demand_unscaled = np.sum(
-            v.X_[t] * pc.electricity_intensities_gcam_ * (1.0 - v.energy_reduction_factor_[t]))
-        pc.electricity_scaling_factor = pc.hist_power_total_gen_gj[t-1] / elec_demand_unscaled
-        pc.electricity_intensities_ = pc.electricity_intensities_gcam_ * pc.electricity_scaling_factor
+    # Energy demand follows REAL gross output (2021 prices), not nominal output X: the intensities are
+    # GJ per unit of 2021 output, so nominal output would let energy use grow with the price level
+    # (about 0.4% per year, 15% by 2060). Correction of November 2026; see utils.real_output_2021_prices.
+    x_real_ = real_output_2021_prices(v, t)
 
-    v.gas_use_[t] = v.X_[t] * pc.gas_intensities_ * (1.0 - v.energy_reduction_factor_[t])
-    v.electricity_use_[t] = v.X_[t] * pc.electricity_intensities_ * (1.0 - v.energy_reduction_factor_[t])
-    v.oil_use_[t] = v.X_[t] * pc.oil_intensities_ * (1.0 - v.energy_reduction_factor_[t])
+    # The electricity intensities carry one common scaling factor for all sectors and all scenarios
+    # (ParametersCalibrated.ELECTRICITY_SCALING_FACTOR, calibration.py section 5.5b), fitted on the
+    # Baseline so that sectoral electricity demand equals observed generation in 2025. Before November
+    # 2026 the factor was recomputed inside each run in 2025, which gave every scenario its own
+    # electricity intensities (1.48 Baseline, 1.38 Vision 2030, 1.42 Transformation).
+    v.gas_use_[t] = x_real_ * pc.gas_intensities_ * (1.0 - v.energy_reduction_factor_[t])
+    v.electricity_use_[t] = x_real_ * pc.electricity_intensities_ * (1.0 - v.energy_reduction_factor_[t])
+    v.oil_use_[t] = x_real_ * pc.oil_intensities_ * (1.0 - v.energy_reduction_factor_[t])
     
     v.oil_use_final_[t] = v.oil_use_[t].copy()
     v.gas_use_final_[t] = v.gas_use_[t].copy()
@@ -378,6 +406,10 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
         )
         v.gas_use_total[t] = np.sum(v.gas_use_final_[t])
         v.oil_use_total[t] = np.sum(v.oil_use_final_[t])
+        # Sectoral electricity use adds up to the observed total, as in the later years
+        x_based_sectoral_total = np.sum(v.electricity_use_[t])
+        if x_based_sectoral_total > 0:
+            v.electricity_use_[t] = v.electricity_use_[t] * (v.electricity_use_total[t] / x_based_sectoral_total)
 
     else:
         # --- TREND LOGIC ---
@@ -533,6 +565,18 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
     v.gas_use_total[t] = np.sum(v.gas_use_final_[t])
     v.oil_use_total[t] = np.sum(v.oil_use_final_[t])
 
+    # Final energy demand (added November 2026): oil and gas used outside the power sector, electricity,
+    # and renewable energy used directly in place of oil and gas (section 4). v.total_energy_demand
+    # above also contains the power sector's fossil generation, which is already part of electricity,
+    # so it counts that electricity twice; it is kept for comparison with earlier results.
+    non_power_ = np.ones(len(v.oil_use_final_[t]), dtype=bool)
+    non_power_[elec_idx] = False
+    re_direct_gj = oil_substituted + gas_substituted
+    v.final_energy_demand[t] = (np.sum(v.oil_use_final_[t][non_power_]) + np.sum(v.gas_use_final_[t][non_power_])
+                                + v.electricity_use_total[t] + re_direct_gj)
+    v.renewable_share_final_energy[t] = ((re_consumed_by_elec + re_direct_gj) / v.final_energy_demand[t]
+                                         if v.final_energy_demand[t] > 0 else 0)
+
     ########################################################################
     # 5. Calculate Emissions (Standard Logic)
     ########################################################################
@@ -554,7 +598,14 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
     v.gas_emissions_total[t] = np.sum(v.gas_emissions_[t])
     v.electricity_emissions_total[t] = np.sum(v.electricity_emissions_[t]) 
     v.oil_emissions_total[t] = np.sum(v.oil_emissions_[t])
-    v.total_emissions[t] = v.gas_emissions_total[t] + v.oil_emissions_total[t]
+    # Process and other non-combustion emissions (added November 2026): the 2021 values by sector
+    # (calibration.py, section 5.5b (e)) move in proportion to real output in 2021 prices.
+    x_2021_ = v.X_[1]
+    v.process_emissions_[t] = pc.process_emissions_2021_mt_ * np.divide(
+        x_real_, x_2021_, out=np.zeros_like(x_real_, dtype=float), where=x_2021_ != 0)
+    v.process_emissions_total[t] = np.sum(v.process_emissions_[t])
+    # v.total_emissions: combustion of oil and gas (CO2) plus process and other non-combustion emissions (CO2e)
+    v.total_emissions[t] = v.gas_emissions_total[t] + v.oil_emissions_total[t] + v.process_emissions_total[t]
     
 # ======================================================================
     # --- NET ZERO LOGIC ---
@@ -567,15 +618,9 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
             # trees actually planted under the Saudi Green Initiative (SGI_TREES_CUMULATIVE_MILLION)
             v.flow_reuse_recycle[t] = 0.0
             v.flow_remove_ccs[t] = 0.0
-            planted_bn, seq_mt = sgi_historical(t)
-            v.flow_remove_nature[t] = seq_mt
-            if not hasattr(v, 'sgi_trees_planted_avg'):
-                v.sgi_trees_planted_avg = np.zeros(len(v.emissions_gross_total))
-                v.sgi_trees_planted_min = np.zeros(len(v.emissions_gross_total))
-                v.sgi_trees_planted_max = np.zeros(len(v.emissions_gross_total))
-            for arr in (v.sgi_trees_planted_avg, v.sgi_trees_planted_min, v.sgi_trees_planted_max):
-                arr[t-1] = planted_bn
-                arr[t] = planted_bn
+            # (irrigated with leftover reclaimed wastewater; mangroves need none)
+            v.flow_remove_nature[t], v.flow_remove_nature_upper[t] = afforestation(v, p, pc, t, None, None)
+            trees_planted_accounting(v, t)
             v.emissions_net_total[t] = v.emissions_gross_total[t] - v.flow_remove_nature[t]
 
     elif p.net_emission_reduction_green_investments_exports_transformation:
@@ -591,62 +636,11 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
             # --------------------------------------------------------------------------------
             # 3. Nature (Saudi Green Initiative) - CAPPED BY WASTEWATER AVAILABILITY
             # --------------------------------------------------------------------------------
-            # Target uptake path: min 20.0 / max 100.0 Mt CO2 in 2060 (sgi_intended_sequestration_mt)
-            sgi_min_2060_mt, sgi_max_2060_mt = 20.0, 100.0
-            
-            # --- CAP SGI BASED ON AVAILABLE WASTEWATER ---
-            # Afforestation gets the reclaimed wastewater left after the reuse sector's deliveries to other
-            # users and after the other mitigation uses (solar, wind, H2, electrification, CCS, CCU)
-            avail_for_sgi_m3 = max(0.0, wastewater_available_for_nexus(v, t) - nexus_water_other_m3(v, pc, t))
-            # Trees planted in earlier years (incl. the SGI forest of 2021-2025) keep maturing and keep
-            # their irrigation; only new planting is limited by the leftover wastewater (sustainable rate:
-            # sgi_water_limited_planting_bn). Water per tree
-            # by type and age: SGI_CITY_TREE_SHARE and sgi_forest_water_m3 (top of this file).
-            existing_uptake_mt = sgi_forest_uptake_existing_mt(v, t)
-            if not hasattr(v, 'sgi_trees_planted_avg'):
-                v.sgi_trees_planted_avg = np.zeros(len(v.emissions_gross_total))
-                v.sgi_trees_planted_min = np.zeros(len(v.emissions_gross_total))
-                v.sgi_trees_planted_max = np.zeros(len(v.emissions_gross_total))
-            # Smooth, forward-looking planting plan (SGI_PLANNING_LEAD_YEARS, top of this file)
-            new_trees_bn_target = sgi_planned_planting_bn(v, t, sgi_min_2060_mt, sgi_max_2060_mt)
-            new_trees_bn_water = sgi_water_limited_planting_bn(v, t, avail_for_sgi_m3)
-            new_trees_bn = min(new_trees_bn_target, new_trees_bn_water)
-            # A temporary wastewater shortfall does not cut the planting programme: planting is held at
-            # least at last year's rate (or the planned rate, if lower), and the extra irrigation is met
-            # by desalination and groundwater (source allocation in PART 6 below).
-            new_trees_bn = max(new_trees_bn, min(new_trees_bn_target, v.sgi_trees_planted_avg[t - 2]))
-            v.flow_remove_nature[t] = existing_uptake_mt + new_trees_bn * 0.2 * SGI_MT_CO2_PER_BILLION_TREES
-            
-            # --------------------------------------------------------------------------------
-            # --- TREE PLANTING ACCOUNTING (5-Year Maturity Delay + Min/Max Range) ---
-            # --------------------------------------------------------------------------------
-            if not hasattr(v, 'sgi_trees_planted_avg'):
-                v.sgi_trees_planted_avg = np.zeros(len(v.emissions_gross_total))
-                v.sgi_trees_planted_min = np.zeros(len(v.emissions_gross_total))
-                v.sgi_trees_planted_max = np.zeros(len(v.emissions_gross_total))
-            
-            # Function to calculate new trees needed based on previously planted maturing trees
-            def get_req_trees(P_array, current_t, target_co2_mt, rate_mt_per_billion):
-                existing_co2 = 0.0
-                for j in range(0, current_t - 1): # Check all trees planted in prior years
-                    age = current_t - j
-                    # 5-year growth curve: 20% per year until 100%
-                    mult = 0.2 * age if age <= 5 else 1.0
-                    existing_co2 += P_array[j] * mult * rate_mt_per_billion
-                shortfall = max(0.0, target_co2_mt - existing_co2)
-                return shortfall / (0.2 * rate_mt_per_billion) # New trees operate at 20% capacity in year 1
+            # Target uptake path: min 20.0 / max 100.0 Mt CO2 in 2060 (sgi_intended_sequestration_mt).
+            # Two cases, see the block comment "Afforestation" at the top of this file.
+            v.flow_remove_nature[t], v.flow_remove_nature_upper[t] = afforestation(v, p, pc, t, 20.0, 100.0)
+            trees_planted_accounting(v, t)
 
-            # Calculate annual plantings required (Avg: 10kg, Min: 12kg, Max: 8kg)
-            v.sgi_trees_planted_avg[t-1] = get_req_trees(v.sgi_trees_planted_avg, t, v.flow_remove_nature[t], 10.0)
-            v.sgi_trees_planted_min[t-1] = get_req_trees(v.sgi_trees_planted_min, t, v.flow_remove_nature[t], 12.0)
-            v.sgi_trees_planted_max[t-1] = get_req_trees(v.sgi_trees_planted_max, t, v.flow_remove_nature[t], 8.0)
-            
-            # Carry forward the last known planting rate to 't' just for plotting smoothness
-            v.sgi_trees_planted_avg[t] = v.sgi_trees_planted_avg[t-1]
-            v.sgi_trees_planted_min[t] = v.sgi_trees_planted_min[t-1]
-            v.sgi_trees_planted_max[t] = v.sgi_trees_planted_max[t-1]
-            # --------------------------------------------------------------------------------
-            
             # Net Accounting
             physical_removal = v.flow_reuse_recycle[t] + v.flow_remove_ccs[t] + v.flow_remove_nature[t]
             max_physical_removal = v.emissions_gross_total[t] * 0.95
@@ -696,57 +690,10 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
             # --------------------------------------------------------------------------------
             # 3. Nature (Saudi Green Initiative) - CAPPED BY WASTEWATER AVAILABILITY
             # --------------------------------------------------------------------------------
-            # Target uptake path: min 1.2 / max 6.0 Mt CO2 in 2060 (sgi_intended_sequestration_mt)
-            sgi_min_2060_mt, sgi_max_2060_mt = 1.2, 6.0
-            
-            # --- CAP SGI BASED ON AVAILABLE WASTEWATER ---
-            # Afforestation gets the reclaimed wastewater left after the reuse sector's deliveries to other
-            # users and after the other mitigation uses (solar, wind, H2, electrification, CCS, CCU)
-            avail_for_sgi_m3 = max(0.0, wastewater_available_for_nexus(v, t) - nexus_water_other_m3(v, pc, t))
-            # Trees planted in earlier years (incl. the SGI forest of 2021-2025) keep maturing and keep
-            # their irrigation; only new planting is limited by the leftover wastewater (sustainable rate:
-            # sgi_water_limited_planting_bn). Water per tree
-            # by type and age: SGI_CITY_TREE_SHARE and sgi_forest_water_m3 (top of this file).
-            existing_uptake_mt = sgi_forest_uptake_existing_mt(v, t)
-            if not hasattr(v, 'sgi_trees_planted_avg'):
-                v.sgi_trees_planted_avg = np.zeros(len(v.emissions_gross_total))
-                v.sgi_trees_planted_min = np.zeros(len(v.emissions_gross_total))
-                v.sgi_trees_planted_max = np.zeros(len(v.emissions_gross_total))
-            # Smooth, forward-looking planting plan (SGI_PLANNING_LEAD_YEARS, top of this file)
-            new_trees_bn_target = sgi_planned_planting_bn(v, t, sgi_min_2060_mt, sgi_max_2060_mt)
-            new_trees_bn_water = sgi_water_limited_planting_bn(v, t, avail_for_sgi_m3)
-            new_trees_bn = min(new_trees_bn_target, new_trees_bn_water)
-            # A temporary wastewater shortfall does not cut the planting programme: planting is held at
-            # least at last year's rate (or the planned rate, if lower), and the extra irrigation is met
-            # by desalination and groundwater (source allocation in PART 6 below).
-            new_trees_bn = max(new_trees_bn, min(new_trees_bn_target, v.sgi_trees_planted_avg[t - 2]))
-            v.flow_remove_nature[t] = existing_uptake_mt + new_trees_bn * 0.2 * SGI_MT_CO2_PER_BILLION_TREES
-            
-            # --------------------------------------------------------------------------------
-            # --- TREE PLANTING ACCOUNTING (5-Year Maturity Delay + Min/Max Range) ---
-            # --------------------------------------------------------------------------------
-            if not hasattr(v, 'sgi_trees_planted_avg'):
-                v.sgi_trees_planted_avg = np.zeros(len(v.emissions_gross_total))
-                v.sgi_trees_planted_min = np.zeros(len(v.emissions_gross_total))
-                v.sgi_trees_planted_max = np.zeros(len(v.emissions_gross_total))
-            
-            def get_req_trees(P_array, current_t, target_co2_mt, rate_mt_per_billion):
-                existing_co2 = 0.0
-                for j in range(0, current_t - 1):
-                    age = current_t - j
-                    mult = 0.2 * age if age <= 5 else 1.0
-                    existing_co2 += P_array[j] * mult * rate_mt_per_billion
-                shortfall = max(0.0, target_co2_mt - existing_co2)
-                return shortfall / (0.2 * rate_mt_per_billion)
-
-            v.sgi_trees_planted_avg[t-1] = get_req_trees(v.sgi_trees_planted_avg, t, v.flow_remove_nature[t], 10.0)
-            v.sgi_trees_planted_min[t-1] = get_req_trees(v.sgi_trees_planted_min, t, v.flow_remove_nature[t], 12.0)
-            v.sgi_trees_planted_max[t-1] = get_req_trees(v.sgi_trees_planted_max, t, v.flow_remove_nature[t], 8.0)
-            
-            v.sgi_trees_planted_avg[t] = v.sgi_trees_planted_avg[t-1]
-            v.sgi_trees_planted_min[t] = v.sgi_trees_planted_min[t-1]
-            v.sgi_trees_planted_max[t] = v.sgi_trees_planted_max[t-1]
-            # --------------------------------------------------------------------------------
+            # Target uptake path: min 1.2 / max 6.0 Mt CO2 in 2060 (sgi_intended_sequestration_mt).
+            # Two cases, see the block comment "Afforestation" at the top of this file.
+            v.flow_remove_nature[t], v.flow_remove_nature_upper[t] = afforestation(v, p, pc, t, 1.2, 6.0)
+            trees_planted_accounting(v, t)
 
             # 4. Net Accounting & Scaling
             # --------------------------------------------------------------------------------
@@ -822,8 +769,10 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
     # and carbon sequestration (SGI) based on literature intensities.
     
     # Water demand by technology (identical intensities in all scenarios)
-    # Afforestation: irrigation by tree type and age (sgi_forest_water_m3); mangroves need none
-    total_nexus_water_m3 = nexus_water_other_m3(v, pc, t) + sgi_forest_water_m3(v, t)
+    # Afforestation: irrigation with reclaimed wastewater (afforestation(), top of this file); mangroves
+    # and, in the upper-bound case, established rain-fed native trees need none
+    sgi_irrigation_m3 = v._sgi_irrigation_m3[t] if hasattr(v, '_sgi_irrigation_m3') else 0.0
+    total_nexus_water_m3 = nexus_water_other_m3(v, pc, t) + sgi_irrigation_m3
     v.water_use_nexus[t] = total_nexus_water_m3
 
     # Source allocation. With mitigation policy, reclaimed wastewater not delivered to other users is

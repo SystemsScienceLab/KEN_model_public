@@ -39,6 +39,7 @@ Variables set by this module (on v, in-place):
 import numpy as np
 from .model_classes import ModelVariables, ModelParameters
 from .calibration import ParametersCalibrated
+from .utils import real_output_2021_prices
 
 def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrated, t: int):
     """
@@ -68,7 +69,7 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
         estimated_fossil_use_gj = (
             pc.gas_intensities_[target_indices] + 
             pc.oil_intensities_[target_indices]
-        ) * v.X_[t-1][target_indices]
+        ) * real_output_2021_prices(v, t-1)[target_indices]   # real output, as in energy_module.py
         
         # 3. Calculate Fossil Energy Removed THIS YEAR (Incremental)
         # Logic: Current fossil demand * Annual Rate
@@ -366,7 +367,7 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
             pc.gas_intensities_ + 
             pc.electricity_intensities_ + 
             pc.oil_intensities_
-        ) * v.X_[t-1]
+        ) * real_output_2021_prices(v, t-1)   # real output, as in energy_module.py
         
         # 3. Calculate Energy to be Saved (GJ)
         energy_saved_gj = estimated_energy_use_gj * efficiency_gains

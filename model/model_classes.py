@@ -408,7 +408,15 @@ class ModelVariables:
     flow_reuse_recycle: NDArray                 # Captured via CCU/EOR
     flow_remove_ccs: NDArray                    # Captured via CCS
     flow_remove_nature: NDArray                 # Sequestered via Nature
-    
+
+    # Additions of November 2026 (see docs and energy_module.py)
+    process_emissions_: NDArray                 # Process and other non-combustion emissions by sector (MtCO2e)
+    process_emissions_total: NDArray            # Their national total (MtCO2e); part of emissions_gross_total
+    final_energy_demand: NDArray                # Final energy: non-power oil and gas plus electricity (GJ), no double counting
+    renewable_share_final_energy: NDArray       # Renewable energy used / final energy demand
+    flow_remove_nature_upper: NDArray           # Afforestation uptake in the upper-bound case (native, rain-fed trees added), MtCO2
+    water_use_nbs_rainfed: NDArray              # Rainfall, runoff and shallow groundwater used by rain-fed native trees in that case (m3); not in the national water balance
+
     # Investments (Thousand SAR) - SECTORAL VARIABLES (With Underscore)
     I_netzero_ccs_: NDArray                     # Investment in CCS infrastructure
     I_netzero_nature_: NDArray                  # Investment in Nature/SGI

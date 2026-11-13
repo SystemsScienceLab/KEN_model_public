@@ -11,12 +11,14 @@
 # =============================================================================
 
 from statsmodels.tsa.ar_model import AutoReg
-import ruptures as rpt
 import numpy as np
 import pandas as pd
 
 
 def identify_structural_break(timeseries, method="bottomup"):
+    # ruptures is imported here, not at the top, so the model still runs when
+    # Windows Smart App Control blocks its compiled files.
+    import ruptures as rpt
     # Detect change points using the specified method
     if method == "pelt":
         algo = rpt.Pelt(model="l2").fit(timeseries.values)

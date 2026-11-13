@@ -5151,8 +5151,10 @@ def plot_energy_scenarios(exp_reports, start_year=2021):
     # FIGURE 1: CORE ENERGY VARIABLES
     # ==========================================================================
     vars_fig1 = [
-        ('total_energy_demand', 'Total Energy Demand', 'TWh', 1/3600000),
-        ('renewable_energy_share', 'Renewable Energy Share', '%', 100),
+        # (a), (b): final energy (non-power oil and gas plus electricity), without the double count of
+        # fossil electricity in total_energy_demand; (c), (d) include process and other non-combustion emissions
+        ('final_energy_demand', 'Final Energy Demand', 'TWh', 1/3600000),
+        ('renewable_share_final_energy', 'Renewable Energy Share', '%', 100),
         ('total_emissions', 'Total Gross Emissions', 'Mt CO2eq', 1),
         ('emissions_net_total', 'Total Net Emissions', 'Mt CO2eq', 1),
         ('oil_use_total', 'Total Oil Demand', 'EJ', 1e-9),
@@ -5247,48 +5249,14 @@ def plot_energy_scenarios(exp_reports, start_year=2021):
                     if getattr(p, 'net_emission_reduction_green_investments_exports_transformation', False) or getattr(p, 'vision_2030_target_CCU_SGI_Carbon', False):
                         is_sgi_active = True
                 
-                # Uncertainty Band for Net Emissions (Graph d)
-                if is_sgi_active and sc_name not in ["Baseline", "Vision_2030"] and var_name == 'emissions_net_total':
-                    lower_bound = np.zeros_like(series_vals)
-                    upper_bound = np.zeros_like(series_vals)
-                    for i, y in enumerate(years):
-                        time_step = y - start_year + 1
-                        fraction = 0.0 if time_step <= 1 else ((time_step - 1) / 39.0 if time_step <= 40 else 1.0)
-                        
-                        mean_seq = 1.0 + (60.0 - 1.0) * (fraction ** 2)
-                        min_seq = 0.2 + (20.0 - 0.2) * (fraction ** 2)
-                        max_seq = 2.0 + (100.0 - 2.0) * (fraction ** 2)
-                        
-                        lower_bound[i] = series_vals[i] - (max_seq - mean_seq)
-                        upper_bound[i] = series_vals[i] + (mean_seq - min_seq)
-                        
-                    ax.fill_between(years, lower_bound, upper_bound, color=color, alpha=0.15, label=f"{sc_name} (NBS uncertainty)")
-                
-                # Uncertainty Band for Investment (Graph h)
-                if is_sgi_active and sc_name != "Baseline" and var_name == 'I_RE':
-                    lower_bound = np.zeros_like(series_vals)
-                    upper_bound = np.zeros_like(series_vals)
-                    c_factor = getattr(p, 'nature_cost_per_tonne', 50.0) * 1000.0 / 1000000.0 
-                    
-                    for i, y in enumerate(years):
-                        time_step = y - start_year + 1
-                        
-                        def get_cap(ts):
-                            if ts <= 1: return 1.0, 0.2, 2.0
-                            f = (ts - 1) / 39.0 if ts <= 40 else 1.0
-                            return (1.0 + (60.0 - 1.0)*(f**2), 0.2 + (20.0 - 0.2)*(f**2), 2.0 + (100.0 - 2.0)*(f**2))
-                        
-                        mean_c, min_c, max_c = get_cap(time_step)
-                        mean_p, min_p, max_p = get_cap(time_step - 1) if time_step > 1 else (0.0, 0.0, 0.0)
-                        
-                        inv_mean = max(0, mean_c - mean_p) * c_factor
-                        inv_min = max(0, min_c - min_p) * c_factor
-                        inv_max = max(0, max_c - max_p) * c_factor
-                        
-                        upper_bound[i] = series_vals[i] + (inv_max - inv_mean)
-                        lower_bound[i] = series_vals[i] - (inv_mean - inv_min)
-                        
-                    ax.fill_between(years, lower_bound, upper_bound, color=color, alpha=0.15)
+                # Band for net emissions (panel d): the line is the model run (afforestation lower bound:
+                # all trees irrigated with leftover reclaimed wastewater); the band reaches down to net
+                # emissions with the upper-bound afforestation case (rain-fed native trees added),
+                # v.flow_remove_nature_upper, computed in the same run (energy_module.py).
+                if is_sgi_active and sc_name not in ["Baseline", "Vision_2030"] and var_name == 'emissions_net_total'                         and 'flow_remove_nature_upper' in rm.columns:
+                    extra = np.maximum(0.0, rm['flow_remove_nature_upper'].values - rm['flow_remove_nature'].values) * factor
+                    ax.fill_between(years, series_vals - extra, series_vals, color=color, alpha=0.25,
+                                    label=f"{sc_name} (afforestation upper bound)")
                 # ======================================================================
 
                 # Plot secondary line ONLY for plot (b)

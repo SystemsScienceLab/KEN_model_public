@@ -14,6 +14,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 from typing import TYPE_CHECKING
+from .utils import real_output_2021_prices
 
 if TYPE_CHECKING:
     from .calibration import ParametersCalibrated
@@ -674,8 +675,17 @@ def calculate_water_demand(v, p, pc, t):
     # With the agri-food value-chain coupling, agricultural water is computed in physical terms in
     # compute_agr_supply (existing path + water of the value-chain increment); convert it back to an
     # intensity on the current agricultural output so that the rest of the module is unchanged.
-    if getattr(p, "agr_valuechain_coupling", False) and v.X_[t][pc.agr_sector] > 0 and v.agr_water_total[t] > 0:
-        v.water_use_intensities_[t][pc.agr_sector] = v.agr_water_total[t] / v.X_[t][pc.agr_sector]
+    # Sectoral water use follows REAL gross output (2021 prices), not nominal output X: the intensities
+    # are m3 per unit of 2021 output, so nominal output would let water use grow with the price level.
+    # Correction of November 2026; see utils.real_output_2021_prices.
+    x_real_ = real_output_2021_prices(v, t)
+    # Agricultural water comes from the bottom-up crop accounting (m3). Its intensity series
+    # pc.agr_water_use_intensity is defined on the accounting's own output path, so it is converted
+    # here to an intensity on real output; agricultural water itself is unchanged by the correction.
+    if x_real_[pc.agr_sector] > 0:
+        v.water_use_intensities_[t][pc.agr_sector] *= v.X_[t][pc.agr_sector] / x_real_[pc.agr_sector]
+    if getattr(p, "agr_valuechain_coupling", False) and x_real_[pc.agr_sector] > 0 and v.agr_water_total[t] > 0:
+        v.water_use_intensities_[t][pc.agr_sector] = v.agr_water_total[t] / x_real_[pc.agr_sector]
 
     # FIX: Zero out other agricultural sectors (Forestry & Fishing) to prevent double counting
     # The calibrated total water (10.8 b) is assigned to pc.agr_sector (0).
@@ -690,7 +700,7 @@ def calculate_water_demand(v, p, pc, t):
     v.water_use_hh[t] = pc.water_use_hh_2021 * (1 + p.wage_population_growth_adjustment)**(t-1)
 
     # Sectoral water use
-    v.water_use_sectoral_[t] = v.X_[t] * v.water_use_intensities_[t]
+    v.water_use_sectoral_[t] = x_real_ * v.water_use_intensities_[t]
     v.water_use_agr[t] = np.sum(v.water_use_sectoral_[t][0:3])
     v.water_use_ind[t] = np.sum(v.water_use_sectoral_[t][3:40])
     v.water_use_ser[t] = np.sum(v.water_use_sectoral_[t][40:])
