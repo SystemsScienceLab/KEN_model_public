@@ -5210,7 +5210,7 @@ def plot_energy_scenarios(exp_reports, start_year=2021):
                     for col in ['I_RE', 'I_hydrogen', 'I_electrification_total', 'I_storage', 'I_efficiency_total']:
                         if col in rm: val_sum += rm[col].values
                     if rs is not None:
-                        for key in ['I_netzero_nature', 'I_netzero_ccs', 'I_netzero_ccu', 'I_carbon_credits']:
+                        for key in ['I_netzero_nature', 'I_netzero_ccs', 'I_netzero_ccu', 'I_carbon_credits', 'I_process_abatement']:
                             if key in rs: val_sum += rs[key].sum(axis=1).values
                     series_vals = val_sum * factor
                     if 'Y' in rm.columns:
@@ -5263,7 +5263,9 @@ def plot_energy_scenarios(exp_reports, start_year=2021):
                 if ax_idx == 1 and ax2 is not None:
                     try:
                         elec_demand_total = rm['electricity_use_total'].values
-                        re_gen_total = rm['renewable_energy_generation'].values
+                        # Renewable electricity delivered to the grid: generation minus the electricity
+                        # used for electrolysis (dedicated capacity for process hydrogen, November 2026)
+                        re_gen_total = rm['renewable_energy_generation'].values - rm['re_used_for_hydrogen'].values
                         
                         re_met_demand = np.minimum(elec_demand_total, re_gen_total)
                         
@@ -5747,7 +5749,7 @@ def plot_energy_scenarios_2(exp_reports, start_year=2021):
                     for col in ['I_RE', 'I_hydrogen', 'I_electrification_total', 'I_storage', 'I_efficiency_total']:
                         if col in rm: val_sum += rm[col].values
                     if rs is not None:
-                        for key in ['I_netzero_nature', 'I_netzero_ccs', 'I_netzero_ccu', 'I_carbon_credits']:
+                        for key in ['I_netzero_nature', 'I_netzero_ccs', 'I_netzero_ccu', 'I_carbon_credits', 'I_process_abatement']:
                             if key in rs: val_sum += rs[key].sum(axis=1).values
                     series_vals = val_sum * factor
                     if 'Y' in rm.columns:

@@ -157,8 +157,9 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
         I_ALL_except_energy_desal_wwater = v.I_total[t-1]  - pc.I_desal - pc.I_wwater - pc.I_RE
     else:    
         # We must subtract EVERYTHING added in the previous year to find the true economic baseline
-        prev_netzero_total = (np.sum(v.I_netzero_ccs_[t-1]) + np.sum(v.I_netzero_nature_[t-1]) + 
-                              (np.sum(v.I_netzero_ccu_[t-1]) if hasattr(v, 'I_netzero_ccu_') else 0))
+        prev_netzero_total = (np.sum(v.I_netzero_ccs_[t-1]) + np.sum(v.I_netzero_nature_[t-1]) +
+                              (np.sum(v.I_netzero_ccu_[t-1]) if hasattr(v, 'I_netzero_ccu_') else 0) +
+                              np.sum(v.I_process_abatement_[t-1]))   # November 2026: process abatement, so it does not compound into trend investment
         
         # v.I_[t-1][sector] already INCLUDES the efficiency added in the previous period.
         # Subtracting v.I_efficiency_total[t-1] on top of that would double-count the efficiency
@@ -264,7 +265,7 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
     # 4. Consolidate all energy investments into the Sectoral Investment Vector (v.I_)
     #########################################################################################
     # A. Add the pre-calculated array investments
-    v.I_[t] = v.I_[t] + v.I_efficiency_[t] + v.I_netzero_ccs_[t] + v.I_netzero_nature_[t] + v.I_netzero_ccu_[t]
+    v.I_[t] = v.I_[t] + v.I_efficiency_[t] + v.I_netzero_ccs_[t] + v.I_netzero_nature_[t] + v.I_netzero_ccu_[t] + v.I_process_abatement_[t]
     
     # B. Assign Battery Storage Ownership (Owned by the Utility sector)
     v.I_[t][pc.electricity_gas_AC_sector] += v.I_storage[t]

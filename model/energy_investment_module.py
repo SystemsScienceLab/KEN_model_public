@@ -41,6 +41,51 @@ from .model_classes import ModelVariables, ModelParameters
 from .calibration import ParametersCalibrated
 from .utils import real_output_2021_prices
 
+
+def process_hydrogen_capacity(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrated, t: int):
+    """Electrolyser capacity for process abatement in year t (GJ H2 per year) and its investment
+    (November 2026). It follows last year's unconstrained hydrogen need of process abatement
+    (energy_module.process_emissions_and_abatement), extrapolated by one year of growth, at 90%
+    utilisation. Total clean hydrogen (this capacity plus the existing hydrogen path) stays within the
+    national cap (energy_module.hydrogen_cap_gj). Depreciation 5% a year, as for the existing
+    electrolysers; investment = new capacity x electrolyzer_capex_per_gj."""
+    from .energy_module import hydrogen_cap_gj
+    delta_h2 = 0.05
+    depreciated = v.k_hydrogen_process_physical[t-1] * (1 - delta_h2)
+    d1 = v.hydrogen_process_demand[t-1]
+    d0 = v.hydrogen_process_demand[t-2] if t > 2 else 0.0
+    growth = min(1.2, d1 / d0) if d0 > 0 else 1.0
+    target = d1 * growth / 0.9
+    base_capacity = v.k_hydrogen_physical[t-1] * (1.05 if getattr(p, 'enable_green_hydrogen', False) else 0.0)
+    room = max(0.0, hydrogen_cap_gj(p, t) / 0.9 - base_capacity)
+    target = min(target, room)
+    new_capacity = max(0.0, target - depreciated)
+    v.k_hydrogen_process_physical[t] = depreciated + new_capacity
+    v.I_hydrogen_process[t] = new_capacity * p.electrolyzer_capex_per_gj / 1000.0
+
+
+def process_abatement_investment(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrated, t: int):
+    """Investment in process abatement in year t by emitting sector (thousand SAR), November 2026.
+
+    Capital stock of abatement of an item = sum over cost tiers of (tonnes abated in the tier x capex
+    per tonne of annual abatement). The cost tiers rise, so deep abatement costs more per tonne
+    (calibration.py section 5.5b (f), input_data/process_abatement_cost_curves.csv). Investment = growth
+    of the stock in each tier + replacement of the stock at 1/lifetime. As for afforestation, the
+    energy module runs after this module, so the stock of t-1 and t-2 is used (one year of lag)."""
+    v.I_process_abatement_[t] = np.zeros(pc.S)
+    if not hasattr(v, '_proc_tier_abated') or t < 3:
+        return
+    usd_to_kSAR = 1e6 * pc.SAR_PER_USD / 1000.0     # 1 Mt x 1 USD/t = 1e6 USD
+    for k, (item, _, _) in enumerate(pc.process_items):
+        i = pc.process_item_sector_idx[item]
+        inv = 0.0
+        for j, tr in enumerate(pc.process_cost_tiers[item]):
+            k1 = v._proc_tier_abated[t-1, k, j] * tr['capex_usd_per_annual_t'] * usd_to_kSAR
+            k0 = v._proc_tier_abated[t-2, k, j] * tr['capex_usd_per_annual_t'] * usd_to_kSAR
+            inv += max(0.0, k1 - k0) + k0 / tr['lifetime']
+        v.I_process_abatement_[t][i] = inv
+
+
 def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrated, t: int):
     """
     Compute energy-related investments for time step t.
@@ -199,6 +244,19 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
         # C. Add Electrification Load
         if p.enable_industrial_electrification:
             target_RE_generation += v.electrification_added_load[t]
+        # C2. Dedicated renewables for process hydrogen (November 2026): electrolysers for process
+        # abatement (section 3b below) get their own renewable capacity, like industrial electrification.
+        process_hydrogen_capacity(v, p, pc, t)
+        target_RE_generation += v.k_hydrogen_process_physical[t] * 0.9 * p.hydrogen_efficiency
+        # C3. Dedicated renewables for the existing (mainly export) hydrogen as well (November 2026).
+        # Before, electrolysis took renewable electricity from the grid and fossil plants filled the gap.
+        # Same capacity path as in section 3 below.
+        if p.enable_green_hydrogen and t >= pc.policy_start_t:
+            if t <= 10:
+                base_h2_capacity = p.hydrogen_target_2030_gj * (t - pc.policy_start_t + 1) / (10 - pc.policy_start_t + 1)
+            else:
+                base_h2_capacity = v.k_hydrogen_physical[t-1] * 1.05
+            target_RE_generation += base_h2_capacity * 0.9 * p.hydrogen_efficiency
 
         # D. Calculate Investment
         depreciated_capacity = v.k_re_physical[t-1] * (1 - pc.delta_RE)
@@ -264,6 +322,11 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
     else:
         v.k_hydrogen_physical[t] = 0
         v.I_hydrogen[t] = 0
+    # 3b. Process electrolysers (capacity set in section 2, process_hydrogen_capacity): their investment
+    # is part of I_hydrogen, owned by the utility sector like the other electrolysers.
+    v.I_hydrogen[t] += v.I_hydrogen_process[t]
+    # 3c. Process abatement investment by emitting sector (process_abatement_investment)
+    process_abatement_investment(v, p, pc, t)
     ########################################################################################################################################################################################################################
     # 4. Net zero investments (CCS, Nature-based, CCU)
     ########################################################################################################################################################################################################################

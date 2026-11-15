@@ -412,6 +412,12 @@ class ModelVariables:
     # Additions of November 2026 (see docs and energy_module.py)
     process_emissions_: NDArray                 # Process and other non-combustion emissions by sector (MtCO2e)
     process_emissions_total: NDArray            # Their national total (MtCO2e); part of emissions_gross_total
+    process_emissions_abated_: NDArray          # Process emissions abated by sector (MtCO2e)
+    I_process_abatement_: NDArray               # Investment in process abatement by owning (emitting) sector (thousand SAR)
+    hydrogen_process_demand: NDArray            # Clean hydrogen needed for the scenario's process abatement (GJ H2)
+    hydrogen_process_use: NDArray               # Clean hydrogen used for process abatement (GJ H2), at most 0.9 x capacity
+    k_hydrogen_process_physical: NDArray        # Electrolyser capacity for process hydrogen (GJ H2 per year)
+    I_hydrogen_process: NDArray                 # Investment in process electrolysers (thousand SAR), part of I_hydrogen
     final_energy_demand: NDArray                # Final energy: non-power oil and gas plus electricity (GJ), no double counting
     renewable_share_final_energy: NDArray       # Renewable energy used / final energy demand
     flow_remove_nature_upper: NDArray           # Afforestation uptake in the upper-bound case (native, rain-fed trees added), MtCO2

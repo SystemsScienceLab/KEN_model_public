@@ -216,6 +216,89 @@ def trees_planted_accounting(v: ModelVariables, t: int):
 
 
 
+def hydrogen_cap_gj(p: ModelParameters, t: int) -> float:
+    """Upper limit of total clean hydrogen production in year t (GJ H2), November 2026.
+    National ambition: about 2.9 Mt H2 by 2030 and 4 Mt by 2035, exports included (CSIS, MEED). From
+    2035 the cap moves linearly to p.hydrogen_cap_2060_mt (4.0 = national target held, Vision 2030;
+    7.0 in the Transformation scenario, which assumes the strategy keeps expanding after 2035)."""
+    year = 2020 + t
+    if year <= 2025:
+        mt = 0.0
+    elif year <= 2030:
+        mt = 2.9 * (year - 2025) / 5.0
+    elif year <= 2035:
+        mt = 2.9 + (4.0 - 2.9) * (year - 2030) / 5.0
+    else:
+        mt = 4.0 + (getattr(p, 'hydrogen_cap_2060_mt', 4.0) - 4.0) * min(1.0, (year - 2035) / 25.0)
+    return mt * 1e6 * 120.0
+
+
+def process_abatement_share(p: ModelParameters, pc: ParametersCalibrated, item: str, t: int) -> float:
+    """Target abatement share of a process emission item in year t: 0 until 2025, then a linear rise from
+    2026 to the scenario's 2060 value (p.process_abatement_2060), constant afterwards."""
+    if getattr(p, 'process_emissions_frozen_technology', False):
+        return 0.0
+    s2060 = getattr(p, 'process_abatement_2060', {}).get(item, 0.0)
+    t0 = pc.policy_start_t - 1
+    return s2060 * min(1.0, max(0.0, (t - t0) / (40 - t0)))
+
+
+def tier_overlaps(tiers, share: float):
+    """Part of the item's emission base covered by each cost tier at a given abatement share."""
+    return [max(0.0, min(share, tr['share_to']) - tr['share_from']) for tr in tiers]
+
+
+def process_emissions_and_abatement(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrated, t: int, x_real_):
+    """Process and other non-combustion emissions by sector in year t (MtCO2e), November 2026.
+
+    emissions = 2021 value x driver index x (1 - abatement share). Driver: real sector output, or the
+    population index for waste and wastewater (calibration.py section 5.5b (f)); with
+    p.process_emissions_frozen_technology all items follow real output and nothing is abated (the
+    result of the first November version). Abatement in hydrogen-based tiers needs clean hydrogen. It is
+    limited by the process electrolyser capacity built in energy_investment_module (one year of lead
+    time) and by the national hydrogen cap; the unconstrained need is stored in
+    v.hydrogen_process_demand, the hydrogen used in v.hydrogen_process_use (GJ H2)."""
+    if not hasattr(v, '_proc_tier_abated'):
+        n_items = len(pc.process_items)
+        max_tiers = max(len(tr) for tr in pc.process_cost_tiers.values())
+        v._proc_tier_abated = np.zeros((len(v.emissions_gross_total), n_items, max_tiers))
+    frozen = getattr(p, 'process_emissions_frozen_technology', False)
+    x_2021_ = v.X_[1]
+    pop_index = (1 + p.wage_population_growth_adjustment) ** (t - 1)
+    v.process_emissions_[t] = np.zeros(pc.S)
+    v.process_emissions_abated_[t] = np.zeros(pc.S)
+    bases, overlaps = {}, {}
+    h2_need_t = 0.0
+    for k, (item, _, driver) in enumerate(pc.process_items):
+        i = pc.process_item_sector_idx[item]
+        if driver == 'population' and not frozen:
+            idx = pop_index
+        else:
+            idx = x_real_[i] / x_2021_[i] if x_2021_[i] != 0 else 0.0
+        base = pc.process_emissions_2021_mt_[i] * idx
+        tiers = pc.process_cost_tiers[item]
+        ov = tier_overlaps(tiers, process_abatement_share(p, pc, item, t))
+        bases[item], overlaps[item] = base, ov
+        h2_need_t += sum(base * o * tr['h2_t_per_t'] for o, tr in zip(ov, tiers))   # Mt H2
+    v.hydrogen_process_demand[t] = h2_need_t * 1e6 * pc.GJ_PER_T_H2
+    h2_available = v.k_hydrogen_process_physical[t] * 0.9
+    f_h2 = min(1.0, h2_available / v.hydrogen_process_demand[t]) if v.hydrogen_process_demand[t] > 0 else 1.0
+    h2_used_mt = 0.0
+    for k, (item, _, _) in enumerate(pc.process_items):
+        i = pc.process_item_sector_idx[item]
+        tiers = pc.process_cost_tiers[item]
+        abated = 0.0
+        for j, (o, tr) in enumerate(zip(overlaps[item], tiers)):
+            a = bases[item] * o * (f_h2 if tr['h2_t_per_t'] > 0 else 1.0)
+            v._proc_tier_abated[t, k, j] = a
+            abated += a
+            h2_used_mt += a * tr['h2_t_per_t']
+        v.process_emissions_abated_[t][i] = abated
+        v.process_emissions_[t][i] = bases[item] - abated
+    v.hydrogen_process_use[t] = h2_used_mt * 1e6 * pc.GJ_PER_T_H2
+    v.process_emissions_total[t] = np.sum(v.process_emissions_[t])
+
+
 def wastewater_recovery_rate(t: int) -> float:
     """Share of urban water use recovered as treated wastewater: 30% in 2021 (t=1), +2 points per year, at most 80%."""
     return min(0.30 + 0.02 * (t - 1), 0.80)
@@ -359,6 +442,16 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
                         # Ensure we don't subtract more gas than exists
                         actual_sub = np.minimum(v.gas_use_final_[t][i], h2_sub)
                         v.gas_use_final_[t][i] -= actual_sub
+
+    # --- Process emissions, their abatement and process hydrogen (November 2026) ---
+    # Computed here, before the electricity mix, because the hydrogen for process abatement uses
+    # renewable electricity. That electricity was added to the renewable build-out in
+    # energy_investment_module (dedicated capacity, as for industrial electrification), so it does not
+    # reduce the renewable supply of the grid. Process hydrogen is not exported and does not replace
+    # fuel; it is added to hydrogen production only for the water and electricity accounts.
+    process_emissions_and_abatement(v, p, pc, t, x_real_)
+    v.hydrogen_production[t] += v.hydrogen_process_use[t]
+    v.re_used_for_hydrogen[t] += v.hydrogen_process_use[t] * p.hydrogen_efficiency
     ########################################################################
     # 3. Determine Electricity Generation Mix
     ########################################################################
@@ -598,12 +691,8 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
     v.gas_emissions_total[t] = np.sum(v.gas_emissions_[t])
     v.electricity_emissions_total[t] = np.sum(v.electricity_emissions_[t]) 
     v.oil_emissions_total[t] = np.sum(v.oil_emissions_[t])
-    # Process and other non-combustion emissions (added November 2026): the 2021 values by sector
-    # (calibration.py, section 5.5b (e)) move in proportion to real output in 2021 prices.
-    x_2021_ = v.X_[1]
-    v.process_emissions_[t] = pc.process_emissions_2021_mt_ * np.divide(
-        x_real_, x_2021_, out=np.zeros_like(x_real_, dtype=float), where=x_2021_ != 0)
-    v.process_emissions_total[t] = np.sum(v.process_emissions_[t])
+    # Process and other non-combustion emissions: computed in process_emissions_and_abatement (above,
+    # after the hydrogen block) with drivers and abatement.
     # v.total_emissions: combustion of oil and gas (CO2) plus process and other non-combustion emissions (CO2e)
     v.total_emissions[t] = v.gas_emissions_total[t] + v.oil_emissions_total[t] + v.process_emissions_total[t]
     

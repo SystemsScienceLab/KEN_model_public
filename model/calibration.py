@@ -1106,6 +1106,39 @@ class ParametersCalibrated:
             items_total_gg_ = sum(process_items_gg_.values())
             for name_, gg_ in process_items_gg_.items():
                 self.process_emissions_2021_mt_[self.sectors.index(name_)] = residual_mt_ * gg_ / items_total_gg_
+
+        # (f) Drivers, abatement and abatement cost curves of the process and other non-combustion emissions
+        # (added November 2026; energy_module.process_emissions, energy_investment_module section 4b).
+        # Each item is one model sector. Driver 'output': real output of the sector (2021 prices).
+        # Driver 'population': population index, because waste and wastewater emissions follow the people
+        # served, not the output of the treatment sectors (which rises with treatment and reuse investment).
+        # Abatement shares per scenario: parameter process_abatement_2060. Cost curves (common to all
+        # scenarios): input_data/process_abatement_cost_curves.csv, one row per tier, cheapest tier first.
+        # Columns used: share_from, share_to (share of the item's emissions the tier covers), capex in USD
+        # per tonne of annual abatement capacity, lifetime in years, hydrogen in t H2 per t CO2e abated
+        # (hydrogen tiers carry only the plant conversion, hydrogen is paid in the hydrogen block).
+        # Sources and the conversion from levelised costs are documented in the CSV and in the SI.
+        self.process_items = [
+            ('minerals', 'Manufacture of other non-metallic mineral products', 'output'),
+            ('chemicals', 'Manufacture of chemicals and chemical products', 'output'),
+            ('metals', 'Manufacture of basic metals', 'output'),
+            ('fugitive', 'Extraction of crude petroleum and natural gas', 'output'),
+            ('agriculture', 'Crop and animal production, hunting and related service activities', 'output'),
+            ('wastewater', 'Sewerage', 'population'),
+            ('solid_waste', 'Waste collection, treatment and disposal activities; materials recovery', 'population'),
+        ]
+        self.process_item_sector_idx = {item_: self.sectors.index(sec_) for item_, sec_, _ in self.process_items}
+        curves_ = pd.read_csv('input_data/process_abatement_cost_curves.csv')
+        self.process_cost_tiers = {}
+        for item_, _, _ in self.process_items:
+            rows_ = curves_[curves_['item'] == item_].sort_values('share_from')
+            self.process_cost_tiers[item_] = [
+                dict(share_from=float(r_.share_from), share_to=float(r_.share_to),
+                     capex_usd_per_annual_t=float(r_.capex_usd_per_annual_t),
+                     lifetime=float(r_.lifetime_years), h2_t_per_t=float(r_.h2_t_per_t_co2))
+                for r_ in rows_.itertuples()]
+        self.SAR_PER_USD = 3.75
+        self.GJ_PER_T_H2 = 120.0   # lower heating value of hydrogen
         if verbose:
             print("--- Power-plant efficiency and national CO2 calibration (2021) ---")
             print(f"  Efficiency oil / gas: {self.power_plant_efficiency_oil:.2f} / {self.power_plant_efficiency_gas:.2f}")
