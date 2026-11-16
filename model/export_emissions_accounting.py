@@ -46,10 +46,10 @@ def load_results(path=None):
         return pickle.load(f), path
 
 
-def main(path=None):
-    results, path = load_results(path)
-    print(f"Results file: {path}")
-
+def compute(results):
+    """Annual emissions from the combustion of exported crude under all price assumptions (GtCO2 per
+    year, dictionary variants[scenario][assumption]) and territorial emissions from the model run
+    (cumulative sums in territorial, annual gross and net series in annual, model units)."""
     pc = results["Baseline"][0]["parameters_calibrated"]
     crude = pc.crude_oil_sector
     barrels_2021 = CRUDE_EXPORTS_2021_MBD * 1e6 * 365
@@ -58,13 +58,9 @@ def main(path=None):
     # 2021 IOT value of crude exports (1000 SAR, prices = 1): common anchor for all scenarios
     EX_crude_2021 = pc.EX_oil_[crude]
     unit_value_sar = EX_crude_2021 * 1e3 / barrels_2021
-    print(f"Crude export value 2021 (IOT): {EX_crude_2021 / 1e6:.1f} bn SAR")
-    print(f"Implied export unit value 2021: {unit_value_sar:.0f} SAR/bbl "
-          f"= {unit_value_sar / SAR_PER_USD:.1f} USD/bbl")
-
     t = np.arange(1, N_YEARS + 1)
     EX_baseline = results["Baseline"][0]["results_sectoral"]["EX_oil"].iloc[:N_YEARS, crude].values
-    variants, territorial, paths = {}, {}, {}
+    variants, territorial, paths, annual = {}, {}, {}, {}
     for sc in SCENARIOS:
         macro = results[sc][0]["results_macro"]
         sectoral = results[sc][0]["results_sectoral"]
@@ -95,6 +91,81 @@ def main(path=None):
         paths[sc] = variants[sc]["Central: crude sector price"]
         territorial[sc] = (macro["emissions_gross_total"].values[:N_YEARS].sum(),
                            macro["emissions_net_total"].values[:N_YEARS].sum())
+        annual[sc] = (np.array([float(np.sum(x)) for x in macro["emissions_gross_total"].values[:N_YEARS]]),
+                      np.array([float(np.sum(x)) for x in macro["emissions_net_total"].values[:N_YEARS]]))
+
+    return dict(pc=pc, gt_2021=gt_2021, EX_crude_2021=EX_crude_2021, unit_value_sar=unit_value_sar,
+                variants=variants, territorial=territorial, paths=paths, annual=annual)
+
+
+UPPER = "Central: crude sector price"
+LOWER = "Oil price follows baseline nominal exports (lower bound)"
+
+
+def plot_export_emissions(results, save_path=None):
+    """Figure: annual territorial emissions (solid lines) and emissions from the combustion of exported
+    crude (dashed lines, central estimate: deflation with the crude sector's model price) by scenario,
+    2021-2060, GtCO2 per year. One panel, scenario colours as in the other result figures. The range
+    of the export estimate under other price assumptions is in the table printed by main()."""
+    import matplotlib.pyplot as plt
+    c = compute(results)
+    years = np.arange(2021, 2021 + N_YEARS)
+    colors = {"Baseline": "#d62728", "Vision_2030": "#ff7f0e", "Transformation": "#1f77b4"}
+    scale = 1e9 if c["territorial"]["Baseline"][0] > 1e6 else 1e3
+    try:
+        plt.style.use("seaborn-v0_8-whitegrid")
+    except Exception:
+        pass
+    fig, ax = plt.subplots(figsize=(13, 7.5))
+    ends = []
+    for sc in SCENARIOS:
+        gross = c["annual"][sc][0] / scale
+        export = c["variants"][sc][UPPER]
+        ax.plot(years, gross, color=colors[sc], linewidth=2.5, label=sc)
+        ax.plot(years, export, color=colors[sc], linewidth=2.5, linestyle="--")
+        ends.append((gross[-1], f"{gross[-1]:.2f}", colors[sc]))
+        ends.append((export[-1], f"{export[-1]:.2f}", colors[sc]))
+        ax.scatter([2060, 2060], [gross[-1], export[-1]], color=colors[sc], s=30, zorder=5)
+    # end-point labels, spread so that they do not overlap
+    ax.set_ylim(bottom=0)
+    y0, y1 = ax.get_ylim()
+    gap = (y1 - y0) * 0.045
+    ends.sort(key=lambda e: e[0])
+    pos = []
+    for y, _, _ in ends:
+        pos.append(y if not pos or y - pos[-1] >= gap else pos[-1] + gap)
+    for (y, txt, col), yp in zip(ends, pos):
+        ax.annotate(txt, xy=(2060, y), xytext=(2061.0, yp), color=col, fontweight="bold", fontsize=14,
+                    va="center", ha="left", annotation_clip=False)
+    # legend: colours = scenarios, line type = account
+    from matplotlib.lines import Line2D
+    handles = [Line2D([0], [0], color=colors[sc], linewidth=2.5, label=sc) for sc in SCENARIOS]
+    handles += [Line2D([0], [0], color="black", linewidth=2.5, label="Territorial emissions (solid)"),
+                Line2D([0], [0], color="black", linewidth=2.5, linestyle="--",
+                       label="Combustion of exported crude (dashed)")]
+    ax.legend(handles=handles, fontsize=14, loc="upper left")
+    ax.set_title("Territorial emissions and emissions from exported crude", fontweight="bold", fontsize=16)
+    ax.set_xlabel("Year", fontweight="bold", fontsize=16)
+    ax.set_ylabel("GtCO$_2$ per year", fontweight="bold", fontsize=16)
+    ax.set_xticks(np.arange(2025, 2061, 5))
+    ax.set_xlim(2021, 2060)
+    ax.tick_params(labelsize=16)
+    plt.tight_layout()
+    if save_path:
+        fig.savefig(save_path, format="pdf", bbox_inches="tight")
+    plt.show()
+
+
+def main(path=None):
+    results, path = load_results(path)
+    print(f"Results file: {path}")
+
+    c = compute(results)
+    pc, gt_2021, EX_crude_2021, unit_value_sar = c["pc"], c["gt_2021"], c["EX_crude_2021"], c["unit_value_sar"]
+    variants, territorial, paths = c["variants"], c["territorial"], c["paths"]
+    print(f"Crude export value 2021 (IOT): {EX_crude_2021 / 1e6:.1f} bn SAR")
+    print(f"Implied export unit value 2021: {unit_value_sar:.0f} SAR/bbl "
+          f"= {unit_value_sar / SAR_PER_USD:.1f} USD/bbl")
 
     # Territorial emissions: detect unit (t or Mt) and convert to Gt
     scale = 1e9 if territorial["Baseline"][0] > 1e6 else 1e3
