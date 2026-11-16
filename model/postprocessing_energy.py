@@ -5256,7 +5256,7 @@ def plot_energy_scenarios(exp_reports, start_year=2021):
                 if is_sgi_active and sc_name not in ["Baseline", "Vision_2030"] and var_name == 'emissions_net_total'                         and 'flow_remove_nature_upper' in rm.columns:
                     extra = np.maximum(0.0, rm['flow_remove_nature_upper'].values - rm['flow_remove_nature'].values) * factor
                     ax.fill_between(years, series_vals - extra, series_vals, color=color, alpha=0.25,
-                                    label=f"{sc_name} (afforestation upper bound)")
+                                    label=f"{sc_name} (NBS uncertainty)")
                 # ======================================================================
 
                 # Plot secondary line ONLY for plot (b)

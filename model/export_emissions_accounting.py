@@ -121,8 +121,11 @@ def plot_export_emissions(results, save_path=None):
     for sc in SCENARIOS:
         gross = c["annual"][sc][0] / scale
         export = c["variants"][sc][UPPER]
-        ax.plot(years, gross, color=colors[sc], linewidth=2.5, label=sc)
-        ax.plot(years, export, color=colors[sc], linewidth=2.5, linestyle="--")
+        name = {"Baseline": "Baseline", "Vision_2030": "Vision 2030", "Transformation": "Transformation"}[sc]
+        lo = c["variants"][sc][LOWER]
+        ax.fill_between(years, np.minimum(lo, export), np.maximum(lo, export), color=colors[sc], alpha=0.15, linewidth=0)
+        ax.plot(years, gross, color=colors[sc], linewidth=2.5, label=f"{name} - territorial emissions")
+        ax.plot(years, export, color=colors[sc], linewidth=2.5, linestyle="--", label=f"{name} - combustion of exported crude")
         ends.append((gross[-1], f"{gross[-1]:.2f}", colors[sc]))
         ends.append((export[-1], f"{export[-1]:.2f}", colors[sc]))
         ax.scatter([2060, 2060], [gross[-1], export[-1]], color=colors[sc], s=30, zorder=5)
@@ -138,12 +141,10 @@ def plot_export_emissions(results, save_path=None):
         ax.annotate(txt, xy=(2060, y), xytext=(2061.0, yp), color=col, fontweight="bold", fontsize=14,
                     va="center", ha="left", annotation_clip=False)
     # legend: colours = scenarios, line type = account
-    from matplotlib.lines import Line2D
-    handles = [Line2D([0], [0], color=colors[sc], linewidth=2.5, label=sc) for sc in SCENARIOS]
-    handles += [Line2D([0], [0], color="black", linewidth=2.5, label="Territorial emissions (solid)"),
-                Line2D([0], [0], color="black", linewidth=2.5, linestyle="--",
-                       label="Combustion of exported crude (dashed)")]
-    ax.legend(handles=handles, fontsize=14, loc="upper left")
+    from matplotlib.patches import Patch
+    handles, labels = ax.get_legend_handles_labels()
+    handles.append(Patch(facecolor="grey", alpha=0.3, label="Range of exported crude estimate (lower bound to central)"))
+    ax.legend(handles=handles, fontsize=12, loc="upper left")
     ax.set_title("Territorial emissions and emissions from exported crude", fontweight="bold", fontsize=16)
     ax.set_xlabel("Year", fontweight="bold", fontsize=16)
     ax.set_ylabel("GtCO$_2$ per year", fontweight="bold", fontsize=16)
