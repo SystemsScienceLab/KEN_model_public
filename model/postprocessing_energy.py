@@ -7850,3 +7850,99 @@ def run_and_plot_sectoral_analysis(exp):
 
     except Exception as e:
         print(f"❌ Heatmap Failed: {e}")
+
+# ======================================================================================================
+# Figures for the SI, November 2026: they work on the saved run reports (dict of scenario -> [report])
+# ======================================================================================================
+def plot_liquid_displacement(results, save_path=None):
+    """Financial and emission effect of the liquid displacement programme in Vision 2030 and Transformation.
+
+    Only the fuel switch is counted (November 2026; the earlier plot_oil_and_gas_switching_intuitive took
+    original minus final oil and gas use over all targeted sectors, including the power sector, and so
+    also counted renewables, electrification and efficiency):
+      - outside the power sector: oil replaced one to one by gas (v.liquid_displaced_oil_gj),
+      - in the power sector: electricity generated from gas instead of oil, against the 2023 oil share of
+        fossil generation (v.liquid_displaced_power_elec_gj); fuel input with the plant efficiencies.
+    Fuels are valued at the 2021 unit value of oil and gas output (output of the extraction sector per GJ
+    of oil and gas used), gas at 70% of oil per GJ, so values are in 2021 prices."""
+    import matplotlib.pyplot as plt
+    import numpy as np
+    GAS_PRICE_DISCOUNT = 0.7
+    scen = [("Vision_2030", "(a) Vision 2030"), ("Transformation", "(b) Transformation")]
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    out = {}
+    for ax, (sc, title) in zip(axes, scen):
+        rep = results[sc][0]
+        m, pc = rep["results_macro"], rep["parameters_calibrated"]
+        years = np.array(m.index) + 2020
+        D = np.asarray(m["liquid_displaced_oil_gj"], dtype=float)          # GJ oil -> gas, non-power
+        E = np.asarray(m["liquid_displaced_power_elec_gj"], dtype=float)   # GJ electricity, oil -> gas
+        eo, eg = pc.power_plant_efficiency_oil, pc.power_plant_efficiency_gas
+        oil_saved = D + E / eo
+        gas_added = D + E / eg
+        idx_mining = pc.sectors.index('Extraction of crude petroleum and natural gas')
+        price_oil = pc.X_[idx_mining] / np.sum((pc.oil_intensities_ + pc.gas_intensities_) * pc.X_)  # thousand SAR per GJ
+        price_gas = price_oil * GAS_PRICE_DISCOUNT
+        net_saving_bn = (oil_saved * price_oil - gas_added * price_gas) / 1e6
+        avoided_mt = oil_saved * pc.oil_emission_factor - gas_added * pc.gas_emission_factor
+        out[sc] = dict(years=years, net_saving_bn=net_saving_bn, avoided_mt=avoided_mt,
+                       oil_saved_ej=oil_saved / 1e9, gas_added_ej=gas_added / 1e9)
+        sel = years <= 2060
+        ax.bar(years[sel], net_saving_bn[sel], color="#2ca02c", alpha=0.75, label="Net fuel cost saving (bn SAR, 2021 prices)")
+        ax.set_title(title, fontsize=14, fontweight="bold", loc="left")
+        ax.set_xlabel("Year", fontsize=12)
+        ax.set_ylabel("Net fuel cost saving (bn SAR)", fontsize=12)
+        ax.grid(axis="y", linestyle="--", alpha=0.3)
+        ax2 = ax.twinx()
+        ax2.plot(years[sel], avoided_mt[sel], color="#1f77b4", lw=2.5, marker="o", ms=3, label="Avoided emissions (MtCO$_2$)")
+        ax2.set_ylabel("Avoided emissions (MtCO$_2$ per year)", fontsize=12, color="#1f77b4")
+        ax2.tick_params(axis="y", labelcolor="#1f77b4")
+        ax.set_ylim(0, max(1.0, np.nanmax(net_saving_bn[sel]) * 1.15))
+        ax2.set_ylim(0, max(1.0, np.nanmax(avoided_mt[sel]) * 1.15))
+        for a in (ax, ax2):
+            a.tick_params(labelsize=11)
+        if sc == "Vision_2030":
+            h1, l1 = ax.get_legend_handles_labels(); h2, l2 = ax2.get_legend_handles_labels()
+            ax.legend(h1 + h2, l1 + l2, loc="upper left", fontsize=11, frameon=True)
+    fig.tight_layout()
+    if save_path:
+        fig.savefig(save_path, format="pdf", bbox_inches="tight")
+    plt.show()
+    return out
+
+
+def plot_electrification_sectors(results, save_path=None):
+    """Sector selection for electrification (Transformation scenario): the 25 sectors with the highest
+    oil and gas intensity (power sector excluded); the 13 targets highlighted, air and water transport
+    marked as excluded (November 2026)."""
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from matplotlib.patches import Patch
+    pc = results["Transformation"][0]["parameters_calibrated"]
+    gas, oil = np.asarray(pc.gas_intensities_), np.asarray(pc.oil_intensities_)
+    idx = [i for i in range(len(pc.sectors)) if i != pc.electricity_sector_idx]
+    idx = sorted(idx, key=lambda i: gas[i] + oil[i])[-25:]
+    targets = set(int(i) for i in pc.electrification_target_sectors)
+    excluded = {pc.sectors.index('Air transport'), pc.sectors.index('Water transport')}
+    fig, ax = plt.subplots(figsize=(12, 10))
+    y = np.arange(len(idx))
+    ax.barh(y, gas[idx], color="#1f77b4", alpha=0.6)
+    ax.barh(y, oil[idx], left=gas[idx], color="#2ca02c", alpha=0.6)
+    for k, i in enumerate(idx):
+        if i in targets:
+            ax.barh(y[k], gas[i] + oil[i], color="none", edgecolor="#ff7f0e", linewidth=2.5)
+        elif i in excluded:
+            ax.barh(y[k], gas[i] + oil[i], color="none", edgecolor="#d62728", linewidth=2, hatch="//")
+    ax.set_yticks(y)
+    ax.set_yticklabels([pc.sectors[i][:60] for i in idx], fontsize=10)
+    ax.set_xlabel("Oil and gas intensity (GJ per thousand SAR of output)", fontsize=12, fontweight="bold")
+    ax.grid(axis="x", linestyle="--", alpha=0.3)
+    ax.legend(handles=[Patch(color="#1f77b4", alpha=0.6, label="Gas intensity"),
+                       Patch(color="#2ca02c", alpha=0.6, label="Oil intensity"),
+                       Patch(facecolor="none", edgecolor="#ff7f0e", linewidth=2.5, label="Electrification target (13 sectors)"),
+                       Patch(facecolor="none", edgecolor="#d62728", hatch="//", label="Among top 15, not electrified (aviation, shipping)")],
+              loc="lower right", fontsize=11)
+    fig.tight_layout()
+    if save_path:
+        fig.savefig(save_path, format="pdf", bbox_inches="tight")
+    plt.show()

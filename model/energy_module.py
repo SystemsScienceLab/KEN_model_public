@@ -413,6 +413,7 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
                 oil_to_reduce_gj = v.oil_use_final_[t][target_indices_non_elec] * current_reduction_pct
                 v.oil_use_final_[t][target_indices_non_elec] -= oil_to_reduce_gj
                 v.gas_use_final_[t][target_indices_non_elec] += oil_to_reduce_gj
+                v.liquid_displaced_oil_gj[t] = np.sum(oil_to_reduce_gj)   # diagnostic (November 2026)
     
     v.gas_use_total[t] = np.sum(v.gas_use_final_[t])
     v.oil_use_total[t] = np.sum(v.oil_use_final_[t])
@@ -606,6 +607,10 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
             # Historical years: oil/gas split of fossil generation from the data
             new_oil_share = pc.hist_power_oil_share_ff[t-1]
             new_gas_share = pc.hist_power_gas_share_ff[t-1]
+        else:
+            # Diagnostic (November 2026): electricity generated from gas instead of oil because of the
+            # liquid displacement, against the 2023 oil share of fossil generation
+            v.liquid_displaced_power_elec_gj[t] = ff_gap_needed * max(0.0, base_oil_share - new_oil_share)
         v.oil_use_final_[t][elec_idx] = ff_gap_needed * new_oil_share
         v.gas_use_final_[t][elec_idx] = ff_gap_needed * new_gas_share
         

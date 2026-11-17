@@ -422,6 +422,8 @@ class ModelVariables:
     renewable_share_final_energy: NDArray       # Renewable energy used / final energy demand
     flow_remove_nature_upper: NDArray           # Afforestation uptake in the upper-bound case (native, rain-fed trees added), MtCO2
     water_use_nbs_rainfed: NDArray              # Rainfall, runoff and shallow groundwater used by rain-fed native trees in that case (m3); not in the national water balance
+    liquid_displaced_oil_gj: NDArray            # Liquid displacement: oil replaced by gas in the targeted non-power sectors (GJ), diagnostic
+    liquid_displaced_power_elec_gj: NDArray     # Liquid displacement: electricity generated from gas instead of oil, against the 2023 fossil mix (GJ), diagnostic
 
     # Investments (Thousand SAR) - SECTORAL VARIABLES (With Underscore)
     I_netzero_ccs_: NDArray                     # Investment in CCS infrastructure
