@@ -106,11 +106,21 @@ SGI_RAIN_SHARE_USABLE = 0.10
 #   irrigated trees (Habib et al. 2019); 50% of the seedlings survive (irrigated field trials in central
 #   Saudi Arabia report 35-79% transplant survival depending on irrigation); seedlings receive 1 m3 of
 #   reclaimed wastewater per year for 3 years.
-SGI_NATIVE_KG_CO2_PER_TREE = 8.0
+SGI_NATIVE_KG_CO2_PER_TREE = 10.0   # optimistic upper bound: central value of the 8-12 kg band (was 8, the low end)
 SGI_NATIVE_SURVIVAL = 0.5
 SGI_ESTABLISH_M3_PER_TREE_YEAR = 1.0
 SGI_ESTABLISH_YEARS = 3
 SGI_MATURITY_YEARS = 5      # a tree reaches full uptake in its fifth year (20% per year)
+# - Water a mature rain-fed native tree needs to survive after establishment (m3 per tree and year of
+#   rainfall, runoff and soil water; November 2026, Michael's decision to move the upper bound towards
+#   the earlier SGI logic of Ansir, in which established native trees needed no water at all).
+#   1.0 m3 is a third of the 3.15 m3 of an irrigated tree (WI_SGI_BM3_PER_MT at 10 kg CO2 per tree).
+#   Drought-adapted Acacia and Ziziphus survive dry years with low transpiration. Assumption, range 0.5
+#   (close to the earlier logic) to 3.15 (same water need as irrigated trees).
+SGI_NATIVE_WATER_M3_PER_TREE = 0.6    # optimistic upper bound, close to the earlier logic (Ansir: 0); a fifth of an irrigated tree
+# - Maximum density of native trees on restored rangeland (trees per ha). Open acacia woodland in the
+#   Arabian Peninsula has tens to a few hundred trees per ha. Assumption, range 100-200.
+SGI_NATIVE_TREES_PER_HA = 150.0
 
 
 def sgi_intended_sequestration_mt(t: float, min_2060_mt: float, max_2060_mt: float) -> float:
@@ -138,7 +148,9 @@ def sgi_native_capacity_mt(t: int) -> float:
         return 0.0
     area_mha = SGI_RESTORED_AREA_2025_MHA + (SGI_RESTORED_AREA_2060_MHA - SGI_RESTORED_AREA_2025_MHA) * min(1.0, (t_area - 5) / 35.0)
     usable_water_m3 = area_mha * 1e6 * SGI_RAINFALL_M3_PER_HA * SGI_RAIN_SHARE_USABLE
-    return usable_water_m3 / (WI_SGI_BM3_PER_MT * 1e9)
+    # Mature native trees the usable water and the land can carry (billion), times uptake per tree
+    trees_bn = min(usable_water_m3 / SGI_NATIVE_WATER_M3_PER_TREE, area_mha * 1e6 * SGI_NATIVE_TREES_PER_HA) / 1e9
+    return trees_bn * SGI_NATIVE_KG_CO2_PER_TREE   # billion trees x kg CO2 per tree = Mt CO2
 
 
 def afforestation(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrated, t: int,
@@ -156,6 +168,12 @@ def afforestation(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
     else:
         target_mt = max(sgi_intended_sequestration_mt(t, min_2060_mt, max_2060_mt), sgi_historical(t)[1])
     mangrove_mt = min(sgi_mangrove_uptake(t), target_mt)
+    # The upper bound follows the high policy path (max path), not the midpoint
+    if min_2060_mt is None:
+        target_up_mt = target_mt
+    else:
+        f_ = min(1.0, (t - 1) / 39.0)
+        target_up_mt = max(2.0 + (max_2060_mt - 2.0) * f_ ** 2, sgi_historical(t)[1])
     # Reclaimed wastewater left after the reuse sector's deliveries to other users and after the other
     # mitigation uses (solar, wind, hydrogen, electrification, CCS, CCU)
     avail_m3 = max(0.0, wastewater_available_for_nexus(v, t) - nexus_water_other_m3(v, pc, t))
@@ -165,7 +183,7 @@ def afforestation(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
     uptake_low = mangrove_mt + irrigated_low_mt
 
     # --- Case 'native_rainfed' (upper bound) ---
-    native_mt = min(max(0.0, target_mt - mangrove_mt), sgi_native_capacity_mt(t)) if t >= pc.policy_start_t else 0.0
+    native_mt = min(max(0.0, target_up_mt - mangrove_mt), sgi_native_capacity_mt(t)) if t >= pc.policy_start_t else 0.0
     native_prev = v._sgi_native_uptake_mt[t-1]
     native_mt = max(native_mt, native_prev)          # established trees stay
     v._sgi_native_uptake_mt[t] = native_mt
@@ -177,16 +195,16 @@ def afforestation(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
     v._sgi_native_planted_bn[t] = new_native_bn
     establish_m3 = float(np.sum(v._sgi_native_planted_bn[max(0, t - SGI_ESTABLISH_YEARS + 1): t + 1])) * 1e9 * SGI_ESTABLISH_M3_PER_TREE_YEAR
     establish_m3 = min(establish_m3, avail_m3)
-    irrigated_up_mt = min(max(0.0, target_mt - mangrove_mt - native_mt), (avail_m3 - establish_m3) / (WI_SGI_BM3_PER_MT * 1e9))
+    irrigated_up_mt = min(max(0.0, target_up_mt - mangrove_mt - native_mt), (avail_m3 - establish_m3) / (WI_SGI_BM3_PER_MT * 1e9))
     uptake_up = mangrove_mt + native_mt + irrigated_up_mt
 
     if getattr(p, 'afforestation_case', 'irrigated') == 'native_rainfed':
         v._sgi_irrigation_m3[t] = irrigated_up_mt * WI_SGI_BM3_PER_MT * 1e9 + establish_m3
-        v.water_use_nbs_rainfed[t] = native_mt * WI_SGI_BM3_PER_MT * 1e9
+        v.water_use_nbs_rainfed[t] = native_mt / SGI_NATIVE_KG_CO2_PER_TREE * 1e9 * SGI_NATIVE_WATER_M3_PER_TREE
         return uptake_up, uptake_up
     v._sgi_irrigation_m3[t] = irrigated_low_mt * WI_SGI_BM3_PER_MT * 1e9
     # Reported for information: the rain-fed water the upper-bound case would use
-    v.water_use_nbs_rainfed[t] = native_mt * WI_SGI_BM3_PER_MT * 1e9
+    v.water_use_nbs_rainfed[t] = native_mt / SGI_NATIVE_KG_CO2_PER_TREE * 1e9 * SGI_NATIVE_WATER_M3_PER_TREE
     return uptake_low, uptake_up
 
 
@@ -458,6 +476,11 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
     # ======================================================================
     # --- ELECTRIFICATION STRATEGY (Oil/Gas -> Electricity) ---
     # ======================================================================
+    # Electricity that replaces the shifted oil and gas (GJ, by sector). Kept apart from the other
+    # sectoral demand, so that the demand cap of section 3 does not cut it (November 2026).
+    if not hasattr(v, '_elec_shift_gj'):
+        v._elec_shift_gj = np.zeros(len(v.electricity_use_total))
+    elec_shift_vec = np.zeros(len(v.electricity_use_[t]))
     if p.enable_industrial_electrification and t >= pc.policy_start_t:
         target_indices = pc.electrification_target_sectors
         
@@ -481,10 +504,13 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
             v.gas_use_final_[t][target_indices] -= gas_to_shift
             
             # C. Add to Electricity Demand
-            # Assumption: 1 GJ Fossil -> 1 GJ Electricity (Conservative grid load estimate)
-            # (Industrial heat pumps often have COP > 2, so this is a conservative upper bound for grid load)
+            # 1 GJ of fossil fuel is replaced by 1/COP GJ of electricity, with the same COP as the
+            # renewable investment (energy_investment_module.py, section 1) and the SI (COP 2.5).
+            # Until November 2026 the shift was 1:1 here, and the demand cap of section 3 then cut it.
+            cop = getattr(p, 'electrification_cop', 2.5)
             total_shifted_energy = oil_to_shift + gas_to_shift
-            v.electricity_use_[t][target_indices] += total_shifted_energy
+            elec_shift_vec[target_indices] = total_shifted_energy / cop
+            v.electricity_use_[t] += elec_shift_vec
             
             # D. Update Totals (so Generation Mix sees new demand)
             v.gas_use_total[t] = np.sum(v.gas_use_final_[t])
@@ -514,10 +540,15 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
         # threshold in the Vision 2030 run around 2040 and moves its 2060 GDP by about 1%.
         nexus_feedback = getattr(p, 'nexus_water_electricity_feedback', False)
         nexus_water_load = v.electricity_nexus_water_total[t-1] if nexus_feedback else 0.0
-        sectoral_base = v.electricity_use_total[t-1] - (v.electricity_nexus_water_total[t-2] if nexus_feedback and t > 2 else 0.0)
-        target_sectoral_electricity = sectoral_base * (1 + v.Y_growth_rate_forecast[t])
-        efficient_demand_total = np.sum(v.electricity_use_[t])
-        target_sectoral_electricity = np.minimum(target_sectoral_electricity, efficient_demand_total)
+        # The trend cap applies to demand without the electrified load; the electrified load (above) is
+        # added on top, so it neither gets cut nor crowds out the other sectors (November 2026).
+        v._elec_shift_gj[t] = np.sum(elec_shift_vec)
+        sectoral_base = (v.electricity_use_total[t-1] - v._elec_shift_gj[t-1]
+                         - (v.electricity_nexus_water_total[t-2] if nexus_feedback and t > 2 else 0.0))
+        target_non_shift = sectoral_base * (1 + v.Y_growth_rate_forecast[t])
+        efficient_demand_total = np.sum(v.electricity_use_[t]) - v._elec_shift_gj[t]
+        target_non_shift = np.minimum(target_non_shift, efficient_demand_total)
+        target_sectoral_electricity = target_non_shift + v._elec_shift_gj[t]
         target_total_electricity_generation = target_sectoral_electricity + nexus_water_load
         # Historical years 2022-2025 (t <= pc.hist_power_last_t): total generation from the data
         # (Ember / Energy Institute, calibration.py section VIII), in all scenarios.
@@ -581,10 +612,12 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
         v.gas_use_total[t] = np.sum(v.gas_use_final_[t])
         v.oil_use_total[t] = np.sum(v.oil_use_final_[t])
         
-        x_based_sectoral_total = np.sum(v.electricity_use_[t])
-        if x_based_sectoral_total > 0:
-            rescale_factor = target_sectoral_electricity / x_based_sectoral_total
-            v.electricity_use_[t] = v.electricity_use_[t] * rescale_factor
+        # Rescale sectoral demand to the target; the electrified load is kept as it is
+        non_shift_vec = v.electricity_use_[t] - elec_shift_vec
+        non_shift_total = np.sum(non_shift_vec)
+        if non_shift_total > 0:
+            rescale_factor = (target_sectoral_electricity - np.sum(elec_shift_vec)) / non_shift_total
+            v.electricity_use_[t] = non_shift_vec * rescale_factor + elec_shift_vec
 
     ########################################################################
     # 4. Substitute remaining Fossil Fuels (non-electricity) with remaining RE

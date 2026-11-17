@@ -34,6 +34,10 @@ CRUDE_EXPORTS_2021_MBD = 6.2    # Saudi crude oil exports 2021, million barrels 
 EMISSION_FACTOR = 0.43          # tCO2 per barrel of crude oil combusted
 SAR_PER_USD = 3.75              # Exchange rate peg
 PEAK_CRUDE_EXPORTS_MBD = 7.6    # Historical peak of annual crude exports (2016)
+# Real oil price trend 1990-2023 for the lower estimate: Brent 23.73 USD/bbl in 1990 (Energy Institute,
+# Statistical Review 2023) and 82.49 USD/bbl in 2023 (annual average) = 3.85% a year nominal; US CPI
+# 130.7 (1990) and 304.7 (2023) = 2.60% a year; real trend = 1.0385 / 1.0260 - 1 = 1.2% a year.
+REAL_OIL_PRICE_TREND = 0.012
 N_YEARS = 40                    # 2021-2060 (t = 1..40)
 
 SCENARIOS = ["Baseline", "Vision_2030", "Transformation"]
@@ -84,7 +88,8 @@ def compute(results):
                 np.minimum(central, PEAK_CRUDE_EXPORTS_MBD / CRUDE_EXPORTS_2021_MBD),
             # Lower bound: one oil price path for all scenarios, rising with the baseline's
             # nominal crude exports, so that baseline export volume stays at its 2021 level
-            "Oil price follows baseline nominal exports (lower bound)": EX / EX_baseline,
+            "Real oil price +1.2%/yr, 1990-2023 trend (lower bound)": EX / p_crude / (1 + REAL_OIL_PRICE_TREND) ** (t - 1) / EX_crude_2021,
+            "Oil price follows baseline nominal exports": EX / EX_baseline,
             "Previous convention: crude + refined, own-2021 anchor": ex_macro / ex_macro[0],
         }
         variants[sc] = {k: x * gt_2021 for k, x in v.items()}
@@ -99,12 +104,13 @@ def compute(results):
 
 
 UPPER = "Central: crude sector price"
-LOWER = "Oil price follows baseline nominal exports (lower bound)"
+LOWER = "Real oil price +1.2%/yr, 1990-2023 trend (lower bound)"
 
 
 def plot_export_emissions(results, save_path=None):
     """Figure: annual territorial emissions (solid lines) and emissions from the combustion of exported
-    crude (dashed lines, central estimate: deflation with the crude sector's model price) by scenario,
+    crude by scenario: upper estimate (dashed, deflation with the crude sector's model price) and lower
+    estimate (dotted, oil price rising with baseline export revenue), shaded in between,
     2021-2060, GtCO2 per year. One panel, scenario colours as in the other result figures. The range
     of the export estimate under other price assumptions is in the table printed by main()."""
     import matplotlib.pyplot as plt
@@ -125,10 +131,12 @@ def plot_export_emissions(results, save_path=None):
         lo = c["variants"][sc][LOWER]
         ax.fill_between(years, np.minimum(lo, export), np.maximum(lo, export), color=colors[sc], alpha=0.15, linewidth=0)
         ax.plot(years, gross, color=colors[sc], linewidth=2.5, label=f"{name} - territorial emissions")
-        ax.plot(years, export, color=colors[sc], linewidth=2.5, linestyle="--", label=f"{name} - combustion of exported crude")
+        ax.plot(years, export, color=colors[sc], linewidth=2.5, linestyle="--", label=f"{name} - exported crude, upper estimate")
+        ax.plot(years, lo, color=colors[sc], linewidth=1.8, linestyle=":", label=f"{name} - exported crude, lower estimate")
         ends.append((gross[-1], f"{gross[-1]:.2f}", colors[sc]))
         ends.append((export[-1], f"{export[-1]:.2f}", colors[sc]))
-        ax.scatter([2060, 2060], [gross[-1], export[-1]], color=colors[sc], s=30, zorder=5)
+        ends.append((lo[-1], f"{lo[-1]:.2f}", colors[sc]))
+        ax.scatter([2060, 2060, 2060], [gross[-1], export[-1], lo[-1]], color=colors[sc], s=30, zorder=5)
     # end-point labels, spread so that they do not overlap
     ax.set_ylim(bottom=0)
     y0, y1 = ax.get_ylim()
@@ -143,8 +151,8 @@ def plot_export_emissions(results, save_path=None):
     # legend: colours = scenarios, line type = account
     from matplotlib.patches import Patch
     handles, labels = ax.get_legend_handles_labels()
-    handles.append(Patch(facecolor="grey", alpha=0.3, label="Range of exported crude estimate (lower bound to central)"))
-    ax.legend(handles=handles, fontsize=12, loc="upper left")
+    handles.append(Patch(facecolor="grey", alpha=0.3, label="Range between lower and upper estimate"))
+    ax.legend(handles=handles, fontsize=11, loc="upper left", ncol=2)
     ax.set_title("Territorial emissions and emissions from exported crude", fontweight="bold", fontsize=16)
     ax.set_xlabel("Year", fontweight="bold", fontsize=16)
     ax.set_ylabel("GtCO$_2$ per year", fontweight="bold", fontsize=16)

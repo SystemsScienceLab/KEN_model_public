@@ -1079,9 +1079,15 @@ class ParametersCalibrated:
         self.electricity_intensities_ = self.electricity_intensities_gcam_ * self.electricity_scaling_factor
         # (e) Process and other non-combustion emissions (added November 2026).
         # Defined as the residual between the official national total and the combustion CO2 the model
-        # accounts for: 716.1 MtCO2e (2021, excluding LULUCF; Kingdom of Saudi Arabia, First Biennial
+        # accounts for: 717.2 MtCO2e (2021, excluding LULUCF; Kingdom of Saudi Arabia, First Biennial
         # Transparency Report, National GHG Inventory Document, submitted to the UNFCCC in March 2025,
         # Table 1; CO2, CH4 and N2O, AR5 global warming potentials) minus the 2021 energy CO2 in (b).
+        # The report gives no national total; 717.2 is the sum of its sector totals for 2021: energy
+        # 579,622 Gg (incl. fugitive 17,312), IPPU 84,270, agriculture 9,205, waste 44,110 (LULUCF -7,509,
+        # so 709.7 with LULUCF). Until November 2026 the value was 716.1.
+        # The Energy Institute CO2 in (b) very likely includes international bunkers, which the
+        # inventory excludes (Table 5: 13.0 Mt in 2021); inventory fuel combustion is 562.3 Mt. The 2021
+        # total is matched exactly; the bunkers lower the process residual by about 10 Mt.
         # The residual is allocated to sectors with the inventory's own non-combustion items for 2021
         # (same report, Gg CO2e): mineral industry 30,025 (Table 11), chemical industry 38,030 (Table 12),
         # metal industry 15,032 (Table 13), other industrial processes 1,183 (IPPU total 84,270 minus the
@@ -1090,7 +1096,7 @@ class ParametersCalibrated:
         # are scaled by one factor to the residual. energy_module.py keeps each sector's emissions
         # proportional to its real output (2021 prices). Set official_total_ghg_2021_mt to None to
         # switch process emissions off.
-        self.official_total_ghg_2021_mt = 716.1
+        self.official_total_ghg_2021_mt = 717.2
         process_items_gg_ = {
             'Manufacture of other non-metallic mineral products': 30025.0,
             'Manufacture of chemicals and chemical products': 38030.0 + 1183.0,
@@ -2464,8 +2470,12 @@ class ParametersCalibrated:
         elec_idx = self.electricity_sector_idx
         target_indices = [i for i in sorted_fossil_indices if i != elec_idx]
         
-        # Select Top 15 most intensive
-        self.electrification_target_sectors = np.array(target_indices[-15:])
+        # Select Top 15 most intensive, then drop air and water transport (November 2026): aviation and
+        # shipping cannot be electrified at scale by 2060, and before this change 80% of their fuel was
+        # shifted to the grid by 2060. The remaining 13 sectors are refining, chemicals, cement, metal
+        # ore mining, land transport and pipelines, warehousing, motor trade and vehicle-intensive services.
+        not_electrifiable_ = {self.sectors.index('Air transport'), self.sectors.index('Water transport')}
+        self.electrification_target_sectors = np.array([i for i in target_indices[-15:] if i not in not_electrifiable_])
         
         # 2. Define Investment Distribution (Machinery & Construction)
         electrification_inv_shares = {
