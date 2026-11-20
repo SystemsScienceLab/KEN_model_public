@@ -1273,7 +1273,7 @@ def plot_sectoral_gdp_comparison(reports):
     # 2. Resolve 6 fixed sectors by case-insensitive substring match 
     FIXED_SUBSTRINGS = [
         'petroleum',
-        'machinery',
+        'manufacture of machinery',   # not 'machinery', which first matches 'fabricated metal products, except machinery'
         'construction',
         'real estate',
         'public administration',

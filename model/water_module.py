@@ -218,9 +218,9 @@ def step2_calculate_production(df_consumption, df_ssr):
         
         # Get SSR (Forward Fill)
         ssr = get_value_with_fallback(year, crop, df_ssr)
-        # Blank SSR cells (e.g. wheat after 2021 in the Vision 2030 and Transformation files)
-        # mean no domestic production. NaN rows were already dropped from the yearly sums, so
-        # this makes the treatment explicit without changing results.
+        # Blank SSR cells mean no domestic production. NaN rows were already dropped from the
+        # yearly sums, so this makes the treatment explicit. (Wheat in the Vision 2030 and
+        # Transformation files: 0.31 to 2026, linear phase-out to 0 in 2034, November 2026.)
         if pd.isna(ssr):
             ssr = 0.0
 
