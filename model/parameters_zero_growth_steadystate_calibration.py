@@ -158,6 +158,10 @@ class ModelParameters:
     CCU_growth_rate: float                  # Annual growth of CCU capacity
     # 3. Remove (CCS & Nature)
     CCS_capacity_target_2035: float         # Target CCS capacity (Mt)
+    afforestation_case: str               # 'irrigated' (lower bound, default) or 'native_rainfed' (upper bound); energy_module.py
+    process_abatement_2060: dict            # Abatement share of process emission items in 2060 (linear rise from 2026); energy_module.process_emissions_and_abatement
+    process_emissions_frozen_technology: bool  # True: all process items follow real output, no abatement (sensitivity run)
+    hydrogen_cap_2060_mt: float             # Cap on total clean hydrogen in 2060 (Mt H2); 2.9 Mt 2030 and 4 Mt 2035 before (energy_module.hydrogen_cap_gj)
     CCS_cost_per_tonne: float               # Cost per tonne of CCS (SAR)
     nature_based_removal_target: float      # Target removal from Nature (Mt)
     # 4. Carbon Market
@@ -196,6 +200,18 @@ class ModelParameters:
     Gov_ext_assets_extraction: float     # Share of Gov_ext_assets_income extracted to Gov_rev; (1-this) reinvested into asset stock (0=full reinvestment, 1=full extraction)
     remittances_saudization_rate: float  # Annual decline in foreign-worker share of remittances (Saudization). 0=no effect, 0.015=1.5%/yr compounding
     gov_surplus_pif_rate: float          # Share of government fiscal surplus invested in PIF (Gov_ext_assets). 0=no reinvestment, 1=100% of surplus into PIF
+    # Agri-food value-chain coupling and agricultural water (water_module.compute_agr_supply)
+    agr_valuechain_coupling: bool        # Domestic agricultural output = crops + non-crop output + a domestic share of value-chain demand growth
+    agr_domestic_share_start: float      # Domestic sourcing share (delta) of agri-food demand growth beyond population, in 2021
+    agr_domestic_share_target: float     # Target domestic sourcing share (delta)
+    agr_domestic_share_target_year: int  # Model period t in which the target delta is reached (linear ramp from t=1 = 2021)
+    agr_increment_crop_share: float      # Crop share (theta) of the value-chain increment; 2021 non-fodder crop share of the sector
+    agr_increment_feed_domestic: float   # Share of the feed for additional livestock output grown domestically (fodder water)
+    agr_livestock_direct_water_intensity: float  # Direct livestock water use (drinking, servicing), m3 per 1000 SAR
+    agr_water_cap: float                 # Ceiling on agricultural water use in m3 (0 = no ceiling); binding cap truncates the domestic increment
+    agr_diet_demand_side: bool           # Apply the crop module's diet/food-waste factor to household demand for agricultural goods too
+    agr_price_indexing: bool             # Index agricultural output (crop module in 2021 prices) with the agricultural price index
+    water_supply_capacity_headroom: float  # Max. share by which desalination/reuse deliveries may exceed calibrated capacity after the groundwater phase-out
 
     @classmethod
     def default_values(cls):
@@ -395,6 +411,14 @@ class ModelParameters:
             CCU_growth_rate = 0.02,                 # 2% annual growth
 
             CCS_capacity_target_2035 = 44.0,        # 44 Mt target
+
+            afforestation_case = 'irrigated',       # Lower bound: all trees irrigated for life with leftover reclaimed wastewater. Upper bound: 'native_rainfed'.
+
+            process_abatement_2060 = {},   # no abatement
+
+            process_emissions_frozen_technology = False,
+
+            hydrogen_cap_2060_mt = 4.0,
             CCS_cost_per_tonne = 350.0,             # Approx (69+25)*3.75
             nature_based_removal_target = 278.0,    # 278 Mt (SGI target)
 
@@ -432,6 +456,19 @@ class ModelParameters:
             Gov_ext_assets_extraction = 0.5,        # 50% of Gov_ext_assets_income extracted to Gov_rev; 50% reinvested into asset stock
             remittances_saudization_rate = 0.0,     # Steady state test: no Saudization effect
             gov_surplus_pif_rate = 0.0,              # Steady state test: no PIF reinvestment
+
+            # --- AGRI-FOOD VALUE CHAIN & AGRICULTURAL WATER ---
+            agr_valuechain_coupling = False,         # Steady-state validation: agricultural output from the crop module only
+            agr_domestic_share_start = 0.76,
+            agr_domestic_share_target = 0.76,
+            agr_domestic_share_target_year = 1,
+            agr_increment_crop_share = 0.124,
+            agr_increment_feed_domestic = 1.0,
+            agr_livestock_direct_water_intensity = 3.0,
+            agr_water_cap = 0.0,
+            agr_diet_demand_side = False,
+            agr_price_indexing = False,
+            water_supply_capacity_headroom = 0.10,   # Deliveries up to 10% above calibrated desalination/reuse capacity; beyond that, capacity investment is needed
             ####################################################################################################################################################################
             # Not yet implemented — the following switch is defined but has no effect on model computation
             ####################################################################################################################################################################

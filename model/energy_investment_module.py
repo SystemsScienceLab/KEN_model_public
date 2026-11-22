@@ -39,6 +39,52 @@ Variables set by this module (on v, in-place):
 import numpy as np
 from .model_classes import ModelVariables, ModelParameters
 from .calibration import ParametersCalibrated
+from .utils import real_output_2021_prices
+
+
+def process_hydrogen_capacity(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrated, t: int):
+    """Electrolyser capacity for process abatement in year t (GJ H2 per year) and its investment
+    (November 2026). It follows last year's unconstrained hydrogen need of process abatement
+    (energy_module.process_emissions_and_abatement), extrapolated by one year of growth, at 90%
+    utilisation. Total clean hydrogen (this capacity plus the existing hydrogen path) stays within the
+    national cap (energy_module.hydrogen_cap_gj). Depreciation 5% a year, as for the existing
+    electrolysers; investment = new capacity x electrolyzer_capex_per_gj."""
+    from .energy_module import hydrogen_cap_gj
+    delta_h2 = 0.05
+    depreciated = v.k_hydrogen_process_physical[t-1] * (1 - delta_h2)
+    d1 = v.hydrogen_process_demand[t-1]
+    d0 = v.hydrogen_process_demand[t-2] if t > 2 else 0.0
+    growth = min(1.2, d1 / d0) if d0 > 0 else 1.0
+    target = d1 * growth / 0.9
+    base_capacity = v.k_hydrogen_physical[t-1] * (1.05 if getattr(p, 'enable_green_hydrogen', False) else 0.0)
+    room = max(0.0, hydrogen_cap_gj(p, t) / 0.9 - base_capacity)
+    target = min(target, room)
+    new_capacity = max(0.0, target - depreciated)
+    v.k_hydrogen_process_physical[t] = depreciated + new_capacity
+    v.I_hydrogen_process[t] = new_capacity * p.electrolyzer_capex_per_gj / 1000.0
+
+
+def process_abatement_investment(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrated, t: int):
+    """Investment in process abatement in year t by emitting sector (thousand SAR), November 2026.
+
+    Capital stock of abatement of an item = sum over cost tiers of (tonnes abated in the tier x capex
+    per tonne of annual abatement). The cost tiers rise, so deep abatement costs more per tonne
+    (calibration.py section 5.5b (f), input_data/process_abatement_cost_curves.csv). Investment = growth
+    of the stock in each tier + replacement of the stock at 1/lifetime. As for afforestation, the
+    energy module runs after this module, so the stock of t-1 and t-2 is used (one year of lag)."""
+    v.I_process_abatement_[t] = np.zeros(pc.S)
+    if not hasattr(v, '_proc_tier_abated') or t < 3:
+        return
+    usd_to_kSAR = 1e6 * pc.SAR_PER_USD / 1000.0     # 1 Mt x 1 USD/t = 1e6 USD
+    for k, (item, _, _) in enumerate(pc.process_items):
+        i = pc.process_item_sector_idx[item]
+        inv = 0.0
+        for j, tr in enumerate(pc.process_cost_tiers[item]):
+            k1 = v._proc_tier_abated[t-1, k, j] * tr['capex_usd_per_annual_t'] * usd_to_kSAR
+            k0 = v._proc_tier_abated[t-2, k, j] * tr['capex_usd_per_annual_t'] * usd_to_kSAR
+            inv += max(0.0, k1 - k0) + k0 / tr['lifetime']
+        v.I_process_abatement_[t][i] = inv
+
 
 def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrated, t: int):
     """
@@ -60,7 +106,7 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
     ########################################################################################################################################################################################################################
     electrification_load_gj = 0.0
     
-    if p.enable_industrial_electrification and t > 1:
+    if p.enable_industrial_electrification and t >= pc.policy_start_t:
         # 1. Identify Target Sectors
         target_indices = pc.electrification_target_sectors
         
@@ -68,7 +114,7 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
         estimated_fossil_use_gj = (
             pc.gas_intensities_[target_indices] + 
             pc.oil_intensities_[target_indices]
-        ) * v.X_[t-1][target_indices]
+        ) * real_output_2021_prices(v, t-1)[target_indices]   # real output, as in energy_module.py
         
         # 3. Calculate Fossil Energy Removed THIS YEAR (Incremental)
         # Logic: Current fossil demand * Annual Rate
@@ -119,12 +165,12 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
     # 2b. Required renewable energy investment (segregated by technology)
     ########################################################################################################################################################################################################################
     
-    if t <= 1:
-        # --- HISTORICAL OVERRIDE (t=1: 2021) ---
+    if t <= pc.hist_power_last_t:
+        # --- HISTORICAL OVERRIDE (t = 1..5: 2021-2025, Ember / Energy Institute; calibration.py VIII) ---
         target_RE_generation = (
-            pc.hist_elec_solar_gj[t-1] +  
-            pc.hist_elec_wind_gj[t-1] +   
-            pc.hist_elec_bio_gj[t-1]
+            pc.hist_power_solar_gj[t-1] +
+            pc.hist_power_wind_gj[t-1] +
+            pc.hist_power_bio_gj[t-1]
         )
         
         v.k_re_physical[t] = target_RE_generation
@@ -137,9 +183,9 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
         hist_total = target_RE_generation if target_RE_generation > 0 else 1.0
         
         # Calculate specific investment for each tech
-        v.I_solar[t] = (new_capacity_needed * (pc.hist_elec_solar_gj[t-1]/hist_total)) * pc.capex_solar_per_gj
-        v.I_wind[t]  = (new_capacity_needed * (pc.hist_elec_wind_gj[t-1]/hist_total)) * pc.capex_wind_per_gj
-        v.I_bio[t]   = (new_capacity_needed * (pc.hist_elec_bio_gj[t-1]/hist_total)) * pc.capex_bio_per_gj
+        v.I_solar[t] = (new_capacity_needed * (pc.hist_power_solar_gj[t-1]/hist_total)) * pc.capex_solar_per_gj
+        v.I_wind[t]  = (new_capacity_needed * (pc.hist_power_wind_gj[t-1]/hist_total)) * pc.capex_wind_per_gj
+        v.I_bio[t]   = (new_capacity_needed * (pc.hist_power_bio_gj[t-1]/hist_total)) * pc.capex_bio_per_gj
         
         v.I_RE[t] = v.I_solar[t] + v.I_wind[t] + v.I_bio[t]
 
@@ -193,10 +239,24 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
             
             target_RE_generation = base_grid_demand * current_target_share
         else:
-            target_RE_generation = v.renewable_energy_generation[t-1] * (1 + p.gRE_trend_rate)
+            # Trend: linear continuation of the 2023-2025 pace (calibration.py, section VIII)
+            target_RE_generation = v.renewable_energy_generation[t-1] + pc.re_trend_annual_addition_gj
         # C. Add Electrification Load
         if p.enable_industrial_electrification:
             target_RE_generation += v.electrification_added_load[t]
+        # C2. Dedicated renewables for process hydrogen (November 2026): electrolysers for process
+        # abatement (section 3b below) get their own renewable capacity, like industrial electrification.
+        process_hydrogen_capacity(v, p, pc, t)
+        target_RE_generation += v.k_hydrogen_process_physical[t] * 0.9 * p.hydrogen_efficiency
+        # C3. Dedicated renewables for the existing (mainly export) hydrogen as well (November 2026).
+        # Before, electrolysis took renewable electricity from the grid and fossil plants filled the gap.
+        # Same capacity path as in section 3 below.
+        if p.enable_green_hydrogen and t >= pc.policy_start_t:
+            if t <= 10:
+                base_h2_capacity = p.hydrogen_target_2030_gj * (t - pc.policy_start_t + 1) / (10 - pc.policy_start_t + 1)
+            else:
+                base_h2_capacity = v.k_hydrogen_physical[t-1] * 1.05
+            target_RE_generation += base_h2_capacity * 0.9 * p.hydrogen_efficiency
 
         # D. Calculate Investment
         depreciated_capacity = v.k_re_physical[t-1] * (1 - pc.delta_RE)
@@ -237,14 +297,14 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
     # 3. Hydrogen investment 
     ########################################################################################################################################################################################################################    
     if p.enable_green_hydrogen:
-        if t <= 1:
+        if t < pc.policy_start_t:
             v.k_hydrogen_physical[t] = 0
             v.I_hydrogen[t] = 0
         else:
-            # 1. Define Target Capacity (Ramp up to 2030)
+            # 1. Define Target Capacity (Ramp up to 2030, from the policy start)
             target_year_idx = 10 
             if t <= target_year_idx:
-                fraction = (t - 1) / (target_year_idx - 1)
+                fraction = (t - pc.policy_start_t + 1) / (target_year_idx - pc.policy_start_t + 1)
                 target_capacity = p.hydrogen_target_2030_gj * fraction
             else:
                 target_capacity = v.k_hydrogen_physical[t-1] * 1.05 
@@ -262,23 +322,23 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
     else:
         v.k_hydrogen_physical[t] = 0
         v.I_hydrogen[t] = 0
+    # 3b. Process electrolysers (capacity set in section 2, process_hydrogen_capacity): their investment
+    # is part of I_hydrogen, owned by the utility sector like the other electrolysers.
+    v.I_hydrogen[t] += v.I_hydrogen_process[t]
+    # 3c. Process abatement investment by emitting sector (process_abatement_investment)
+    process_abatement_investment(v, p, pc, t)
     ########################################################################################################################################################################################################################
     # 4. Net zero investments (CCS, Nature-based, CCU)
     ########################################################################################################################################################################################################################
-    if p.net_emission_reduction_green_investments_exports_transformation:
+    if p.net_emission_reduction_green_investments_exports_transformation and t >= pc.policy_start_t:
 
         # --- A. CCS INVESTMENT (Hard-to-Abate Industry) ---
         ccs_target_year = 15 # Target year index (e.g., 2035)
-        
-        if t <= ccs_target_year:
-            # Linear ramp up to target
-            ccs_capacity_needed = (p.CCS_capacity_target_2035 / ccs_target_year) * t
-        else:
-            # Maintain capacity (or slight growth)
-            ccs_capacity_needed = p.CCS_capacity_target_2035
-            
+        # Linear ramp from the policy start to the target; same path as the CCS flow in energy_module.py
+        ccs_ramp_years = ccs_target_year - pc.policy_start_t + 1
+        ccs_capacity_needed = p.CCS_capacity_target_2035 * min(1.0, (t - pc.policy_start_t + 1) / ccs_ramp_years)
         # Calculate annual addition (Delta)
-        ccs_prev = (p.CCS_capacity_target_2035 / ccs_target_year) * (t-1) if t > 1 else 0
+        ccs_prev = p.CCS_capacity_target_2035 * min(1.0, max(0, t - pc.policy_start_t) / ccs_ramp_years)
         ccs_added = np.maximum(0, ccs_capacity_needed - ccs_prev)
         
         # COST CALCULATION:
@@ -291,22 +351,10 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
         v.I_netzero_ccs_[t][chem_idx] = cost_ccs
 
 # --- B. NATURE INVESTMENT (SGI - Afforestation & Water Infrastructure) ---
-        # While physical sequestration is random, financial investment is based 
-        # on the EXPECTED (Mean) planting capacity trajectory.
-        
-        def get_expected_nature_cap(time_step):
-            if time_step <= 1:
-                return 1.0 # 1 Mt Mean in 2021
-            elif time_step <= 40:
-                fraction = (time_step - 1) / 39.0
-                # Quadratic expansion from 1.0 Mt (2021) to 60.0 Mt Mean (2060)
-                return 1.0 + (60.0 - 1.0) * (fraction ** 2)
-            else:
-                return 60.0 # Cap maintains after 2060
-
-        nature_cap_needed = get_expected_nature_cap(t)
-        nature_prev = get_expected_nature_cap(t - 1) if t > 1 else 0.0
-        nature_added = np.maximum(0, nature_cap_needed - nature_prev)
+        # Investment follows the sequestration actually deployed, i.e. after the wastewater cap
+        # (energy_module), not the uncapped policy target. The energy module runs after the investment
+        # module within a period, so the capacity added in the previous period is used.
+        nature_added = np.maximum(0, v.flow_remove_nature[t-1] - v.flow_remove_nature[t-2]) if t > 1 else 0.0
         
         # ----------------------------------------------------------------------
         # 1. Tree Planting Cost (Assigned to Agriculture)
@@ -366,7 +414,7 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
     ########################################################################################################################################################################################################################
     # 5. Energy efficiency investment
     ########################################################################################################################################################################################################################
-    if p.enable_energy_efficiency_gains:
+    if p.enable_energy_efficiency_gains and t >= pc.policy_start_t:
         # 1. Determine the Targeted Efficiency Gain % for this year (Sectors)
         # This matches the logic that WILL happen in energy_module later
         efficiency_gains = np.zeros(pc.S)
@@ -382,7 +430,7 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
             pc.gas_intensities_ + 
             pc.electricity_intensities_ + 
             pc.oil_intensities_
-        ) * v.X_[t-1]
+        ) * real_output_2021_prices(v, t-1)   # real output, as in energy_module.py
         
         # 3. Calculate Energy to be Saved (GJ)
         energy_saved_gj = estimated_energy_use_gj * efficiency_gains
@@ -408,7 +456,7 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
     # We calculated the physical load at the top of the function. 
     # Now we calculate the cost of the industrial equipment (not the grid).
     
-    if p.enable_industrial_electrification and t > 1:
+    if p.enable_industrial_electrification and t >= pc.policy_start_t:
         # Re-calculate the GJ switched to apply the cost factor
         # Load (Elec) * COP = Original Fossil Energy Switched
         cop = getattr(p, 'electrification_cop', 2.5)
@@ -426,7 +474,7 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
     # Timeline: Start 2025 -> 10% Coverage by 2030 -> 100% Coverage by 2060
     # Localization: 100% Import initially -> Local production starts after 2030
     
-    if p.net_emission_reduction_green_investments_exports_transformation and t > 1:
+    if p.net_emission_reduction_green_investments_exports_transformation and t >= pc.policy_start_t:
         # 1. Calculate Target Capacity (Physical GJ)
         # ----------------------------------------------------
         # Convert Annual Gen (GJ) to Daily Avg (GJ/day)

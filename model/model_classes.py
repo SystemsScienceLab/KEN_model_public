@@ -278,6 +278,28 @@ class ModelVariables:
     water_use_ser: NDArray                      # Service water use
     water_use_total_national: NDArray                          # Total water use (scalar)
     water_use_intensities_: NDArray               # Water use intensity endogenous from crop mode (m3 per 1000 SAR of output)
+    # Agri-food value-chain coupling (water_module.compute_agr_supply); outputs in 1000 SAR at 2021 prices
+    agr_X_crop: NDArray                         # Crop output from the bottom-up crop module
+    agr_X_livestock: NDArray                    # Non-crop (mainly livestock) output, grows with population and diet factor
+    agr_X_valuechain: NDArray                   # Domestic value-chain increment (delta x demand growth beyond population)
+    agr_D_valuechain: NDArray                   # Real intermediate demand of all other sectors for agricultural goods
+    agr_domestic_share_delta: NDArray           # Domestic sourcing share of the value-chain demand growth
+    agr_water_valuechain: NDArray               # Water use of the value-chain increment (m3)
+    agr_water_total: NDArray                    # Total agricultural water use incl. the value-chain increment (m3)
+    agr_water_cap_slack: NDArray                # Agricultural water cap minus agricultural water use (m3), 0 if no cap
+    # Desalination and wastewater capacity investment (investment_module section 2)
+    I_desal_cap: NDArray                        # Own capacity investment in desalination, before energy add-ons (1000 SAR)
+    I_wwater_cap: NDArray                       # Own capacity investment in wastewater treatment, before energy add-ons (1000 SAR)
+    water_supply_gap: NDArray                   # Demand not coverable by desalination/reuse capacity after the groundwater phase-out (m3)
+    water_gw_phased_out: NDArray                # 1 once groundwater abstraction has been phased out (persistent), else 0
+    # Water for mitigation (energy_module part 6): renewables, hydrogen, electrification, CCS, CCU, afforestation
+    water_use_nexus: NDArray                    # Water use of mitigation technologies and afforestation (m3), part of water_use_total_national
+    water_energy_wwater: NDArray                # ... of which reclaimed wastewater not delivered to other users (m3)
+    water_energy_desal: NDArray                 # ... of which desalination (m3), shortfall only
+    water_energy_gw: NDArray                    # ... of which groundwater (m3), shortfall only
+    water_use_supply_mix: NDArray               # Water use met by desalination, sector reuse and groundwater: total minus water_energy_wwater (m3)
+    wwater_collectable: NDArray                 # Collectable urban wastewater: recovery rate x household, industry and service water use (m3)
+    electricity_nexus_water_total: NDArray      # Electricity to supply the water for mitigation (GJ)
 
     #################################################################################################################################################
     # Water Supply (Desalination & Wastewater)
@@ -386,7 +408,23 @@ class ModelVariables:
     flow_reuse_recycle: NDArray                 # Captured via CCU/EOR
     flow_remove_ccs: NDArray                    # Captured via CCS
     flow_remove_nature: NDArray                 # Sequestered via Nature
-    
+
+    # Additions of November 2026 (see docs and energy_module.py)
+    process_emissions_: NDArray                 # Process and other non-combustion emissions by sector (MtCO2e)
+    process_emissions_total: NDArray            # Their national total (MtCO2e); part of emissions_gross_total
+    process_emissions_abated_: NDArray          # Process emissions abated by sector (MtCO2e)
+    I_process_abatement_: NDArray               # Investment in process abatement by owning (emitting) sector (thousand SAR)
+    hydrogen_process_demand: NDArray            # Clean hydrogen needed for the scenario's process abatement (GJ H2)
+    hydrogen_process_use: NDArray               # Clean hydrogen used for process abatement (GJ H2), at most 0.9 x capacity
+    k_hydrogen_process_physical: NDArray        # Electrolyser capacity for process hydrogen (GJ H2 per year)
+    I_hydrogen_process: NDArray                 # Investment in process electrolysers (thousand SAR), part of I_hydrogen
+    final_energy_demand: NDArray                # Final energy: non-power oil and gas plus electricity (GJ), no double counting
+    renewable_share_final_energy: NDArray       # Renewable energy used / final energy demand
+    flow_remove_nature_upper: NDArray           # Afforestation uptake in the upper-bound case (native, rain-fed trees added), MtCO2
+    water_use_nbs_rainfed: NDArray              # Rainfall, runoff and shallow groundwater used by rain-fed native trees in that case (m3); not in the national water balance
+    liquid_displaced_oil_gj: NDArray            # Liquid displacement: oil replaced by gas in the targeted non-power sectors (GJ), diagnostic
+    liquid_displaced_power_elec_gj: NDArray     # Liquid displacement: electricity generated from gas instead of oil, against the 2023 fossil mix (GJ), diagnostic
+
     # Investments (Thousand SAR) - SECTORAL VARIABLES (With Underscore)
     I_netzero_ccs_: NDArray                     # Investment in CCS infrastructure
     I_netzero_nature_: NDArray                  # Investment in Nature/SGI

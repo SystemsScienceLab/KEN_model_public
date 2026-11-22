@@ -23,6 +23,16 @@ from .water_module import get_agr_data
 class ParametersCalibrated:
     """Calibrated input parameters of the model."""
 
+    # Common scaling factor for the oil and gas intensities of all non-power sectors, fitted so that
+    # national energy CO2 in the Baseline scenario matches the Energy Institute series 2021-2025 (least
+    # squares; see section 5.5b and model/calibrate_national_co2_factor.py, which recomputes it).
+    NATIONAL_CO2_SCALING_FACTOR = 0.924
+
+    # Common scaling factor for the electricity intensities of all sectors, fitted so that sectoral
+    # electricity demand in the Baseline scenario equals observed generation in 2025 (section 5.5b (d);
+    # recomputed by model/calibrate_national_co2_factor.py). Same value in all scenarios.
+    ELECTRICITY_SCALING_FACTOR = 1.493
+
 
 
     def __init__(self, parameters, verbose=False, scenario_config: dict = None):
@@ -988,6 +998,159 @@ class ParametersCalibrated:
         # We assume renewable energy has zero operational emissions.
         self.re_emission_factor = 0.0
 
+        ########################################################################
+        # 5.5b Power-plant efficiency and calibration of the 2021 national CO2 total
+        ########################################################################
+        # (a) Power-plant efficiency (GJ of electricity per GJ of fuel burned).
+        # The historical electricity data (section VIII) give electricity GENERATED from oil and gas.
+        # Power plants burn 1/efficiency GJ of fuel per GJ of electricity, and the emission factors
+        # (section 5.5) apply to the fuel. energy_module.py converts generation into fuel input.
+        # - Oil-fired plants (mostly steam turbines): 0.35. Electrical Trader (2024), "Fossil fuels power
+        #   efficiency by type": oil steam plants 30-37%.
+        #   https://electricaltrader.com/blogs/news/fossil-fuels-power-efficiency-by-type
+        # - Gas-fired plants: 0.45, fleet average. Same source: combined-cycle gas turbines (CCGT) 50-60%,
+        #   simple-cycle (open-cycle) gas turbines 20-35%, gas-fired steam plants 35-40%. Saudi Arabia's gas
+        #   fleet mixes all three, so a fleet average below CCGT is used.
+        # Check: with the 2021 generation mix (oil 38%, gas 62%) these values give about 565 g CO2/kWh,
+        # close to the reported direct intensity (Ember 2023: 571-573 g/kWh; Climate Transparency 2022 /
+        # Enerdata: 614 g/kWh). Ember's current data (~700 g CO2e/kWh) are lifecycle values incl. upstream
+        # methane and are not used. Replace with measured fleet efficiencies (SEC/ECRA) when available.
+        # Setting both to 1.0 reproduces the earlier model.
+        self.power_plant_efficiency_oil = 0.35
+        self.power_plant_efficiency_gas = 0.45
+
+        # (b) National energy-related CO2 (MtCO2) the model is calibrated to, 2021-2025.
+        # Source: Energy Institute (2026), Statistical Review of World Energy, 75th edition, table
+        # "Carbon dioxide emissions from energy" (CO2 from combustion of oil, gas and coal; flaring and
+        # process emissions are reported separately, as in the model). Saudi Arabia, Mt CO2:
+        self.national_energy_co2_hist_mt = {2021: 572.4, 2022: 617.8, 2023: 632.0, 2024: 649.8, 2025: 650.5}
+        # Set national_energy_co2_target_2021_mt to None to switch the scaling in (c) off.
+        self.national_energy_co2_target_2021_mt = self.national_energy_co2_hist_mt[2021]
+        # In 2021-2025 national energy CO2 is set to these values in all scenarios (energy_module.py,
+        # section 4b); False lets the model compute these years (used to fit the factor in (c)).
+        self.force_hist_national_co2 = True
+
+        # 2021 electricity generated from oil and gas (GWh), same values as the historical data in
+        # section VIII (Ember / Energy Institute; checked there by an assertion).
+        self.power_gen_2021_oil_gwh = 149859
+        self.power_gen_2021_gas_gwh = 242085
+
+        # Power-sector CO2 in 2021 (MtCO2) with the efficiencies above
+        GJ_PER_GWH_ = 3600
+        self.power_co2_2021_mt = (
+            self.power_gen_2021_oil_gwh * GJ_PER_GWH_ / self.power_plant_efficiency_oil * self.oil_emission_factor +
+            self.power_gen_2021_gas_gwh * GJ_PER_GWH_ / self.power_plant_efficiency_gas * self.gas_emission_factor)
+
+        # (c) Scale the oil and gas intensities of all non-power sectors by one common factor so that
+        # national energy CO2 matches the Energy Institute series (b). The intensities come from GCAM
+        # final-energy demand (input_data/energy_intensities.csv); the factor keeps their relative
+        # structure and only adjusts the level. It is fitted (least squares) over 2021-2025 in the
+        # Baseline scenario (with force_hist_national_co2 off), with the power sector following the
+        # historical generation data, and is the same in all scenarios. It sets the level from 2026,
+        # when the historical values (b) no longer apply, so that 2026 continues smoothly from 2025. Fit (Oct 2026): 0.913; model (Baseline,
+        # not forced) vs. Energy Institute: 2021 +7.2%, 2022 -2.3%, 2023 -2.0%, 2024 -1.9%, 2025 -0.5%. Recompute with
+        # model/calibrate_national_co2_factor.py whenever the energy data or the macro calibration change.
+        # The power sector's own fuel use is set from the historical electricity data in
+        # energy_module.py, so its row is not scaled. Applied here, before sections 5.7 and 5.8.
+        self.oil_intensities_gcam_ = self.oil_intensities_.copy()
+        self.gas_intensities_gcam_ = self.gas_intensities_.copy()
+        elec_idx_ = self.sectors.index('Electricity, gas, steam and air conditioning supply')
+        non_power_ = np.ones(len(self.oil_intensities_), dtype=bool)
+        non_power_[elec_idx_] = False
+        if self.national_energy_co2_target_2021_mt is not None:
+            self.national_co2_scaling_factor = ParametersCalibrated.NATIONAL_CO2_SCALING_FACTOR
+        else:
+            self.national_co2_scaling_factor = 1.0
+        self.oil_intensities_ = self.oil_intensities_gcam_.copy()
+        self.gas_intensities_ = self.gas_intensities_gcam_.copy()
+        self.oil_intensities_[non_power_] *= self.national_co2_scaling_factor
+        self.gas_intensities_[non_power_] *= self.national_co2_scaling_factor
+        # (d) Scale the electricity intensities of all sectors by one common factor, so that sectoral
+        # electricity demand equals observed generation in the last historical year (2025) and demand
+        # continues from the observed level in 2026. Like the factor in (c) it is fitted on the Baseline
+        # scenario and is the same in all scenarios (ELECTRICITY_SCALING_FACTOR, recomputed by
+        # model/calibrate_national_co2_factor.py). Before November 2026 it was recomputed inside every
+        # run (energy_module.py), which gave each scenario its own intensities (1.48 Baseline, 1.38
+        # Vision 2030, 1.42 Transformation): a scenario with higher output in 2025 received lower
+        # electricity intensities for all later years. Applied here, before sections 5.7 and 5.8, so that
+        # the efficiency tiers and costs use the same electricity quantities as the model run.
+        self.electricity_intensities_gcam_ = self.electricity_intensities_.copy()
+        self.electricity_scaling_factor = ParametersCalibrated.ELECTRICITY_SCALING_FACTOR
+        self.electricity_intensities_ = self.electricity_intensities_gcam_ * self.electricity_scaling_factor
+        # (e) Process and other non-combustion emissions (added November 2026).
+        # Defined as the residual between the official national total and the combustion CO2 the model
+        # accounts for: 717.2 MtCO2e (2021, excluding LULUCF; Kingdom of Saudi Arabia, First Biennial
+        # Transparency Report, National GHG Inventory Document, submitted to the UNFCCC in March 2025,
+        # Table 1; CO2, CH4 and N2O, AR5 global warming potentials) minus the 2021 energy CO2 in (b).
+        # The report gives no national total; 717.2 is the sum of its sector totals for 2021: energy
+        # 579,622 Gg (incl. fugitive 17,312), IPPU 84,270, agriculture 9,205, waste 44,110 (LULUCF -7,509,
+        # so 709.7 with LULUCF). Until November 2026 the value was 716.1.
+        # The Energy Institute CO2 in (b) very likely includes international bunkers, which the
+        # inventory excludes (Table 5: 13.0 Mt in 2021); inventory fuel combustion is 562.3 Mt. The 2021
+        # total is matched exactly; the bunkers lower the process residual by about 10 Mt.
+        # The residual is allocated to sectors with the inventory's own non-combustion items for 2021
+        # (same report, Gg CO2e): mineral industry 30,025 (Table 11), chemical industry 38,030 (Table 12),
+        # metal industry 15,032 (Table 13), other industrial processes 1,183 (IPPU total 84,270 minus the
+        # three), fugitive emissions from oil and gas 17,312 (Table 10), agriculture 9,205 and waste 44,110
+        # (Table 1; of which wastewater 25,600, the rest solid waste). These items sum to 154.9 Mt; they
+        # are scaled by one factor to the residual. energy_module.py keeps each sector's emissions
+        # proportional to its real output (2021 prices). Set official_total_ghg_2021_mt to None to
+        # switch process emissions off.
+        self.official_total_ghg_2021_mt = 717.2
+        process_items_gg_ = {
+            'Manufacture of other non-metallic mineral products': 30025.0,
+            'Manufacture of chemicals and chemical products': 38030.0 + 1183.0,
+            'Manufacture of basic metals': 15032.0,
+            'Extraction of crude petroleum and natural gas': 17312.0,
+            'Crop and animal production, hunting and related service activities': 9205.0,
+            'Sewerage': 25600.0,
+            'Waste collection, treatment and disposal activities; materials recovery': 44110.0 - 25600.0,
+        }
+        self.process_emissions_2021_mt_ = np.zeros(len(self.sectors))
+        if self.official_total_ghg_2021_mt is not None:
+            residual_mt_ = self.official_total_ghg_2021_mt - self.national_energy_co2_hist_mt[2021]
+            items_total_gg_ = sum(process_items_gg_.values())
+            for name_, gg_ in process_items_gg_.items():
+                self.process_emissions_2021_mt_[self.sectors.index(name_)] = residual_mt_ * gg_ / items_total_gg_
+
+        # (f) Drivers, abatement and abatement cost curves of the process and other non-combustion emissions
+        # (added November 2026; energy_module.process_emissions, energy_investment_module section 4b).
+        # Each item is one model sector. Driver 'output': real output of the sector (2021 prices).
+        # Driver 'population': population index, because waste and wastewater emissions follow the people
+        # served, not the output of the treatment sectors (which rises with treatment and reuse investment).
+        # Abatement shares per scenario: parameter process_abatement_2060. Cost curves (common to all
+        # scenarios): input_data/process_abatement_cost_curves.csv, one row per tier, cheapest tier first.
+        # Columns used: share_from, share_to (share of the item's emissions the tier covers), capex in USD
+        # per tonne of annual abatement capacity, lifetime in years, hydrogen in t H2 per t CO2e abated
+        # (hydrogen tiers carry only the plant conversion, hydrogen is paid in the hydrogen block).
+        # Sources and the conversion from levelised costs are documented in the CSV and in the SI.
+        self.process_items = [
+            ('minerals', 'Manufacture of other non-metallic mineral products', 'output'),
+            ('chemicals', 'Manufacture of chemicals and chemical products', 'output'),
+            ('metals', 'Manufacture of basic metals', 'output'),
+            ('fugitive', 'Extraction of crude petroleum and natural gas', 'output'),
+            ('agriculture', 'Crop and animal production, hunting and related service activities', 'output'),
+            ('wastewater', 'Sewerage', 'population'),
+            ('solid_waste', 'Waste collection, treatment and disposal activities; materials recovery', 'population'),
+        ]
+        self.process_item_sector_idx = {item_: self.sectors.index(sec_) for item_, sec_, _ in self.process_items}
+        curves_ = pd.read_csv('input_data/process_abatement_cost_curves.csv')
+        self.process_cost_tiers = {}
+        for item_, _, _ in self.process_items:
+            rows_ = curves_[curves_['item'] == item_].sort_values('share_from')
+            self.process_cost_tiers[item_] = [
+                dict(share_from=float(r_.share_from), share_to=float(r_.share_to),
+                     capex_usd_per_annual_t=float(r_.capex_usd_per_annual_t),
+                     lifetime=float(r_.lifetime_years), h2_t_per_t=float(r_.h2_t_per_t_co2))
+                for r_ in rows_.itertuples()]
+        self.SAR_PER_USD = 3.75
+        self.GJ_PER_T_H2 = 120.0   # lower heating value of hydrogen
+        if verbose:
+            print("--- Power-plant efficiency and national CO2 calibration (2021) ---")
+            print(f"  Efficiency oil / gas: {self.power_plant_efficiency_oil:.2f} / {self.power_plant_efficiency_gas:.2f}")
+            print(f"  Power CO2 2021: {self.power_co2_2021_mt:.1f} Mt; national 2021 (EI): {self.national_energy_co2_target_2021_mt} Mt")
+            print(f"  Scaling factor for non-power oil and gas intensities: {self.national_co2_scaling_factor:.3f}")
+
         # The emissions from electricity will now be calculated dynamically based on the
         # decarbonization of its input fuels (handled in model.py)
         # We need the index of the electricity sector for this.
@@ -1769,6 +1932,12 @@ class ParametersCalibrated:
         self.GJ_PER_GWH = 3600  # 1 GWh = 1000 MWh = 3600 GJ
         # 1. Load NEW Historical Electricity Mix Data (GWh)
         # Historical electricity mix data (GWh)
+        # 2020-2025: Ember, Yearly Electricity Data (release of April 2026),
+        #   https://ember-energy.org/data/yearly-electricity-data/ ; identical to Energy Institute (2026),
+        #   Statistical Review of World Energy, "Electricity generation" and "Electricity generation by
+        #   fuel" (Saudi Arabia: 392.9 TWh in 2021, 409.8 in 2022, 433.2 in 2023, 458.4 in 2024, 471.4 in 2025).
+        #   Ember's "Solar" includes solar thermal, so "Solar thermal" is 0 for these years.
+        # Before 2020: earlier source of the model (unchanged).
         hist_data_str = """Oil   68103   2000     GWh
         Oil 63535   2001     GWh
         Oil 62584   2002     GWh
@@ -1789,10 +1958,12 @@ class ParametersCalibrated:
         Oil 174122  2017     GWh
         Oil 163398  2018     GWh
         Oil 168219  2019     GWh
-        Oil 164077  2020     GWh
-        Oil 168805  2021     GWh
-        Oil 172378  2022     GWh
-        Oil 181659  2023     GWh
+        Oil 148410  2020     GWh
+        Oil 149859  2021     GWh
+        Oil 159985  2022     GWh
+        Oil 159034  2023     GWh
+        Oil 165252  2024     GWh
+        Oil 151230  2025     GWh
         Natural gas 58088   2000     GWh
         Natural gas 70138   2001     GWh
         Natural gas 79152   2002     GWh
@@ -1813,10 +1984,12 @@ class ParametersCalibrated:
         Natural gas 205250  2017     GWh
         Natural gas 225639  2018     GWh
         Natural gas 219121  2019     GWh
-        Natural gas 229485  2020     GWh
-        Natural gas 238876  2021     GWh
-        Natural gas 243932  2022     GWh
-        Natural gas 257066  2023     GWh
+        Natural gas 231567  2020     GWh
+        Natural gas 242085  2021     GWh
+        Natural gas 247844  2022     GWh
+        Natural gas 269491  2023     GWh
+        Natural gas 282094  2024     GWh
+        Natural gas 300428  2025     GWh
         Wind        2000     GWh
         Wind        2001     GWh
         Wind        2002     GWh
@@ -1837,10 +2010,12 @@ class ParametersCalibrated:
         Wind        2017     GWh
         Wind        2018     GWh
         Wind        2019     GWh
-        Wind        2020     GWh
-        Wind    132 2021     GWh
-        Wind    1588    2022     GWh
-        Wind    1588    2023     GWh
+        Wind 6  2020     GWh
+        Wind 6  2021     GWh
+        Wind 794  2022     GWh
+        Wind 1588  2023     GWh
+        Wind 1592  2024     GWh
+        Wind 1588  2025     GWh
         Solar PV        2000     GWh
         Solar PV        2001     GWh
         Solar PV        2002     GWh
@@ -1861,10 +2036,12 @@ class ParametersCalibrated:
         Solar PV    65  2017     GWh
         Solar PV    65  2018     GWh
         Solar PV    320 2019     GWh
-        Solar PV    916 2020     GWh
-        Solar PV    867 2021     GWh
-        Solar PV    980 2022     GWh
-        Solar PV    1049    2023     GWh
+        Solar PV 911  2020     GWh
+        Solar PV 994  2021     GWh
+        Solar PV 1216  2022     GWh
+        Solar PV 3126  2023     GWh
+        Solar PV 9474  2024     GWh
+        Solar PV 18179  2025     GWh
         Solar thermal       2000     GWh
         Solar thermal       2001     GWh
         Solar thermal       2002     GWh
@@ -1885,10 +2062,12 @@ class ParametersCalibrated:
         Solar thermal       2017     GWh
         Solar thermal   11  2018     GWh
         Solar thermal   135 2019     GWh
-        Solar thermal   135 2020     GWh
-        Solar thermal   135 2021     GWh
-        Solar thermal   135 2022     GWh
-        Solar thermal   135 2023     GWh"""
+        Solar thermal 0  2020     GWh
+        Solar thermal 0  2021     GWh
+        Solar thermal 0  2022     GWh
+        Solar thermal 0  2023     GWh
+        Solar thermal 0  2024     GWh
+        Solar thermal 0  2025     GWh"""
 
         parsed_data = []
         for line in hist_data_str.strip().split('\n'):
@@ -1937,6 +2116,39 @@ class ParametersCalibrated:
             df_hist_model_years['Wind'].to_numpy() * self.GJ_PER_GWH)
         self.hist_elec_bio_gj = (
             df_hist_model_years['Bioenergy'].to_numpy() * self.GJ_PER_GWH)
+        # Historical power sector 2021-2025 (Ember / Energy Institute, see data block above).
+        # In these years energy_module.py takes total generation and the oil/gas split from the data
+        # (t = 1..5), in all scenarios; from 2026 the model projects them.
+        self.hist_power_years = [2021, 2022, 2023, 2024, 2025]
+        self.hist_power_last_t = len(self.hist_power_years)  # t = 5 is 2025
+        df_hist_power = df_pivot_gwh.loc[self.hist_power_years]
+        hist_oil_gwh = df_hist_power['Oil'].to_numpy()
+        hist_gas_gwh = df_hist_power['Natural gas'].to_numpy()
+        self.hist_power_total_gen_gj = (hist_oil_gwh + hist_gas_gwh + df_hist_power['Wind'].to_numpy() +
+                                        df_hist_power['Solar'].to_numpy() +
+                                        df_hist_power['Bioenergy'].to_numpy()) * self.GJ_PER_GWH
+        self.hist_power_oil_share_ff = hist_oil_gwh / (hist_oil_gwh + hist_gas_gwh)
+        self.hist_power_gas_share_ff = hist_gas_gwh / (hist_oil_gwh + hist_gas_gwh)
+        self.hist_power_solar_gj = df_hist_power['Solar'].to_numpy() * self.GJ_PER_GWH
+        self.hist_power_wind_gj = df_hist_power['Wind'].to_numpy() * self.GJ_PER_GWH
+        self.hist_power_bio_gj = df_hist_power['Bioenergy'].to_numpy() * self.GJ_PER_GWH
+        hist_re_gj = self.hist_power_solar_gj + self.hist_power_wind_gj + self.hist_power_bio_gj
+        self.hist_power_re_share = hist_re_gj / self.hist_power_total_gen_gj
+        # Baseline (trend) renewables after 2025: the average annual increase of 2023-2025 is added each
+        # year (linear continuation of the recent pace, +7.5 TWh/yr). This replaces the exponential trend
+        # (gRE_trend_rate, 15.4%/yr), which from the observed 2025 level would exceed total electricity
+        # demand around 2050.
+        self.re_trend_annual_addition_gj = (hist_re_gj[-1] - hist_re_gj[-3]) / 2
+
+        # First model period of the scenario-specific energy measures (renewable build-out beyond the
+        # data, hydrogen, industrial electrification, efficiency gains, oil-to-gas switching, CCS, CCU and
+        # afforestation). Up to 2025 the energy system follows the historical data in all scenarios.
+        self.policy_start_t = self.hist_power_last_t + 1   # t = 6 is 2026
+
+        # Consistency with the 2021 generation used for the national CO2 calibration (section 5.5b)
+        assert np.isclose(df_hist_model_years.loc[2021, 'Oil'], self.power_gen_2021_oil_gwh) and \
+            np.isclose(df_hist_model_years.loc[2021, 'Natural gas'], self.power_gen_2021_gas_gwh), \
+            "2021 electricity generation differs from section 5.5b; update power_gen_2021_*_gwh there"
         # Scaling factor for historical electricity data (1.0 = no scaling applied)
         reduction_factor = 1
         self.hist_elec_oil_gj *= reduction_factor
@@ -1964,6 +2176,10 @@ class ParametersCalibrated:
         # Calculate shares *within* the fossil fuel mix (for future gap-filling)
         self.ff_oil_share_2023 = gen_2023_oil_gj / total_ff_2023_gj
         self.ff_gas_share_2023 = gen_2023_gas_gj / total_ff_2023_gj
+        # The future fossil mix starts from the last historical year (2025), not 2023, so that it
+        # continues from the data used for 2021-2025 (names kept for compatibility).
+        self.ff_oil_share_2023 = self.hist_power_oil_share_ff[-1]
+        self.ff_gas_share_2023 = self.hist_power_gas_share_ff[-1]
 
         # 5. Store Initial (t=0, 2021) Renewable Generation
         self.initial_RE_generation_gj = (
@@ -2014,19 +2230,12 @@ class ParametersCalibrated:
         # 4. Define the target and create the ramp
         target_share_2030 = 0.50  # 50% target for t=10 (year 2030)
 
-        # Create the ramp from 2023 (t=3) to 2030 (t=10)
-        # This is 8 points total (t=3, 4, 5, 6, 7, 8, 9, 10)
-        ramp_t3_to_t10 = np.linspace(
-            start_ramp_share_2023,
-            target_share_2030,
-            num=8  # (2030 is t=10. 10 - 3 + 1 = 8 points)
-        )
-
-        # 5. Concatenate all years to create the final ramp
-        # This list will have 10 items (indices 0-9), for t=1 to t=10
-        self.re_target_share_ramp = np.concatenate(
-            ([base_share_2021, base_share_2022], ramp_t3_to_t10)
-        )
+        # Ramp: historical renewable shares for 2021-2025 (t = 1..5, Ember / Energy Institute), then a
+        # linear ramp from the 2025 share to the 2030 target (t = 5..10). 10 items, for t = 1 to t = 10.
+        n_hist_ = self.hist_power_last_t
+        ramp_hist_to_t10 = np.linspace(self.hist_power_re_share[-1], target_share_2030,
+                                       num=10 - n_hist_ + 1)
+        self.re_target_share_ramp = np.concatenate((self.hist_power_re_share[:-1], ramp_hist_to_t10))
 
         if verbose:
             print(f"  t=1 (2021) Share: {self.re_target_share_ramp[0]:.4%}")
@@ -2162,11 +2371,20 @@ class ParametersCalibrated:
         end_sim_year = 2065   # Max year in water module
         
         try:
-            # get_agr_data returns dicts {Year: Value}
-             # Modified signature in water_module.py to just take scenario_name
-            crop_X_dict, agr_intensity_dict, agr_irrigation_invest_dict, agr_irrigation_om_dict, agr_irrigation_subsidy_dict = get_agr_data(water_scenario, verbose=verbose)
-            
+            # get_agr_data returns dicts {Year: Value}, plus the derived 2021 crop share.
+            # Pass in the 2021 IOT total output for the combined agriculture sector so the
+            # crop/livestock split is derived from actual base-year data instead of a
+            # hardcoded ratio, and reconciles exactly with the IOT in 2021.
+            # Population growth is passed from the scenario parameters so that the crop module and
+            # the economic core use the same population path (0 in the steady-state validation run).
+            (crop_X_dict, agr_intensity_dict, agr_irrigation_invest_dict, agr_irrigation_om_dict,
+             agr_irrigation_subsidy_dict, crop_share_2021, agr_details) = get_agr_data(
+                water_scenario, verbose=verbose, total_output_2021_iot=self.X_[self.agr_sector],
+                population_growth_rate=parameters.wage_population_growth_adjustment,
+                return_details=True)
+
             self.crop_X_dict = crop_X_dict
+            self.crop_share_2021 = crop_share_2021
             self.agr_water_use_intensity_dict = agr_intensity_dict
             self.agr_irrigation_invest_dict = agr_irrigation_invest_dict
             self.agr_irrigation_om_dict = agr_irrigation_om_dict
@@ -2186,20 +2404,54 @@ class ParametersCalibrated:
             for i in range(max_t):
                 y = start_sim_year + i
                 self.crop_X[i] = crop_X_dict.get(y, 0.0)
-                # Calculate AGR_X: Total Output = Crop Output / 0.34
-                if self.crop_X[i] > 0:
-                    self.AGR_X[i] = self.crop_X[i] / 0.34
+                # AGR_X: Total Output = Crop Output / crop_share_2021, where crop_share_2021
+                # is the crop share of the combined sector's 2021 IOT total output (held
+                # fixed for all years — see get_agr_data).
+                if self.crop_X[i] > 0 and crop_share_2021 > 0:
+                    self.AGR_X[i] = self.crop_X[i] / crop_share_2021
                 else:
                     self.AGR_X[i] = 0.0
                 self.agr_water_use_intensity[i] = agr_intensity_dict.get(y, 0.0)
                 self.agr_irrigation_invest[i] = agr_irrigation_invest_dict.get(y, 0.0)
                 self.agr_irrigation_om[i] = agr_irrigation_om_dict.get(y, 0.0)
                 self.agr_irrigation_subsidy[i] = agr_irrigation_subsidy_dict.get(y, 0.0)
-                
+
+            ####################################################################
+            # 8.2.1 Agri-food value-chain coupling (see water_module.compute_agr_supply)
+            ####################################################################
+            # Components of agricultural output in 2021 prices: crops (crop module), non-crop output
+            # (mainly livestock, 83% of the sector in 2021) growing with population and the diet
+            # factor, and a value-chain increment driven by intermediate demand of other sectors.
+            self.X_live_2021 = self.X_[self.agr_sector] - self.crop_X[0]
+            self.agr_pop_factor = np.array([(1 + parameters.wage_population_growth_adjustment) ** i
+                                            for i in range(max_t)])
+            self.agr_diet_factor = np.array([agr_details["diet_factor"].get(start_sim_year + i, 1.0)
+                                             for i in range(max_t)])
+            # Existing agricultural water path (crop withdrawal + residual scaled with crop output)
+            self.agr_water_base = np.array([agr_details["water_base"].get(start_sim_year + i, 0.0)
+                                            for i in range(max_t)])
+            # Water intensity of non-fodder crops (m3 per 1000 SAR), reflects the scenario's
+            # irrigation technology, greenhouse and crop mix
+            self.agr_crop_nonfodder_intensity = np.array(
+                [agr_details["crop_nonfodder_intensity"].get(start_sim_year + i, 0.0) for i in range(max_t)])
+            # Fodder water per unit of non-crop output in 2021 (m3 per 1000 SAR): water cost of
+            # feeding additional livestock with domestically grown fodder
+            self.agr_feed_water_intensity = (agr_details["fodder_water_2021"] / self.X_live_2021
+                                             if self.X_live_2021 > 0 else 0.0)
+            # Intermediate demand of all other sectors for agricultural goods in the IOT (own use
+            # excluded); diagnostic only, the model anchors the reference path to its own t=1 demand
+            _a_agr_row = self.A[self.agr_sector].copy()
+            _a_agr_row[self.agr_sector] = 0.0
+            self.D_agr_2021 = float(np.dot(_a_agr_row, self.X_))
+            # 2021 domestic supply share of agricultural goods, X / (X + IM)
+            self.agr_domestic_share_2021 = self.X_[self.agr_sector] / (
+                self.X_[self.agr_sector] + self.IM_[self.agr_sector])
+
         except Exception as e:
             print(f"Error calling water module: {e}")
             # Initialize with zeros to avoid crashes if files are missing
             self.AGR_X = np.zeros(100)
+            self.crop_share_2021 = 0.0
             self.agr_water_use_intensity = np.zeros(100)
             self.agr_irrigation_invest = np.zeros(100)
             self.agr_irrigation_om = np.zeros(100)
@@ -2218,8 +2470,12 @@ class ParametersCalibrated:
         elec_idx = self.electricity_sector_idx
         target_indices = [i for i in sorted_fossil_indices if i != elec_idx]
         
-        # Select Top 15 most intensive
-        self.electrification_target_sectors = np.array(target_indices[-15:])
+        # Select Top 15 most intensive, then drop air and water transport (November 2026): aviation and
+        # shipping cannot be electrified at scale by 2060, and before this change 80% of their fuel was
+        # shifted to the grid by 2060. The remaining 13 sectors are refining, chemicals, cement, metal
+        # ore mining, land transport and pipelines, warehousing, motor trade and vehicle-intensive services.
+        not_electrifiable_ = {self.sectors.index('Air transport'), self.sectors.index('Water transport')}
+        self.electrification_target_sectors = np.array([i for i in target_indices[-15:] if i not in not_electrifiable_])
         
         # 2. Define Investment Distribution (Machinery & Construction)
         electrification_inv_shares = {

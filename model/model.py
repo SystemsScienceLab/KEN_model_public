@@ -23,7 +23,7 @@ from .investment_module import investment_module
 from .exports_module import exports_module
 from .green_exports_module import calculate_green_exports_and_substitution
 from .ar_model_estimation import estimate_ar_model, estimate_ar_model_log, estimate_ar_model_growthrates, forecast, determine_optimal_lag_order, determine_optimal_lag_order_log, determine_optimal_lag_order_growthrates, identify_structural_break
-from .water_module import replace_agr_X, water_accounting, apply_irrigation_costs
+from .water_module import replace_agr_X, water_accounting, apply_irrigation_costs, agr_diet_consumption_shares
 from .remittances_module import remittances_module
 import warnings
 
@@ -125,6 +125,11 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
     # 1. Update A matrix according to desalination share
     ########################################################################################################################################################################################################################
     v.A__[t], v.desal_share[t] = calc_io_table(v, p, pc, t)
+
+    # Diet / food-waste factor of the crop module applied to household demand for agricultural
+    # goods as well (Transformation). Set before any use of pc.dC in this step.
+    if p.agr_diet_demand_side:
+        pc.dC = agr_diet_consumption_shares(pc, t)
 
     ########################################################################################################################################################################################################################
     ########################################################################################################################################################################################################################
@@ -947,7 +952,7 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
         v.X_[t] = np.dot(np.linalg.inv(pc.I - v.A__[t]), v.Y_[t])
         # This is the input from the water module on the water consumption in the agriculture sector
         # Based on food demand, crop plantation schedules, water use per crop, irrigation technologies, etc.
-        replace_agr_X(v, pc, t)
+        replace_agr_X(v, pc, t, p)
         # Re-create Z matrix from last period to have a direct representation of IO Shares
         v.Z__[t] = v.A__[t]  @ np.diag(v.X_[t])
         # This is the same as the Z matrix

@@ -18,6 +18,52 @@ import numpy as np
 import pandas as pd
 import warnings
 
+
+def set_investment_trend(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrated, t: int):
+    """Trend growth rate of investment in period t > 1, v.gI_trend_endog[t]. Uses only values of t-1."""
+    if p.Endogenous_investment:
+        # If investment in a maturing economy exceeds consumption, reduce the average investment
+        # growth rate by an exogenous factor
+        if p.Endogenous_investment_reduction and np.sum(v.I_[t-1]) > v.C[t-1]:
+            v.gI_trend_endog[t] = v.gI_trend_endog[t-1] * p.investment_reduction_factor
+        else:
+            v.gI_trend_endog[t] = pc.gI_avg
+    elif not getattr(p, 'Investment_exog_semi_endog_correction', False):
+        # Correction disabled: use raw calibrated trend rate
+        v.gI_trend_endog[t] = pc.gI_avg
+    else:
+        # ──────────────────────────────────────────────────────────────────
+        # Semi-endogenous Keynesian dampening of exogenous investment trend
+        # Motivation: even with an exogenous trend rate, large macro
+        # imbalances should moderate investment (Keynesian channel):
+        #   1. Gov deficit crowding-out: high deficit → higher borrowing
+        #      costs and reduced business confidence
+        #   2. Profit rate decline: lower retained earnings → less internal
+        #      finance available for new investment
+        # Both signals are measured at t-1, normalised to GDP, and combined
+        # additively into correction_factor ∈ [0,1] scaling pc.gI_avg.
+        # ──────────────────────────────────────────────────────────────────
+        gdp_t1 = max(np.sum(v.Y_[t-1]), 1.0)   # positive aggregate GDP denominator
+
+        # Signal 1: government deficit / GDP
+        gov_deficit       = v.Gov_exp[t-1] - v.Gov_rev[t-1]
+        gov_deficit_ratio = gov_deficit / gdp_t1
+        gov_threshold     = getattr(p, 'I_correction_gov_deficit_threshold', 0.05)
+        gov_sensitivity   = getattr(p, 'I_correction_gov_deficit_sensitivity', 2.0)
+        gov_correction    = max(0.0, gov_deficit_ratio - gov_threshold) * gov_sensitivity
+
+        # Signal 2: profit rate fall relative to calibrated initial level
+        profit_rate_now   = np.sum(v.P_[t-1]) / gdp_t1
+        profit_rate_init  = np.sum(pc.P_) / max(np.sum(pc.Y_), 1.0)
+        profit_gap        = max(0.0, profit_rate_init - profit_rate_now)
+        profit_sensitivity = getattr(p, 'I_correction_profit_sensitivity', 2.0)
+        profit_correction  = profit_gap * profit_sensitivity
+
+        # Combined: scale gI_trend down, bounded to [0, 1]
+        correction_factor   = max(0.0, 1.0 - gov_correction - profit_correction)
+        v.gI_trend_endog[t] = pc.gI_avg * correction_factor
+
+
 ###################################################################################################################################################################################################################################################################################################
 def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrated, t: int, verbose=False):
 ###################################################################################################################################################################################################################################################################################################    
@@ -26,6 +72,13 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
     ########################################################################################################################################################################################################################
     energy_investment_module(v, p, pc, t)
 
+    # Trend growth rate of investment for this period. It is used by desalination, wastewater and the
+    # electricity base below, so it must be set first (November 2026 fix: it used to be set only in
+    # section 3, after these uses, which then read 0). In t = 1 it is set in section 3 as before, so the
+    # base year still reproduces the input-output table.
+    if t > 1:
+        set_investment_trend(v, p, pc, t)
+
 
     ########################################################################################################################################################################################################################
     # 2. Desalination and wastewater investment
@@ -33,7 +86,7 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
     if t == 1:
         v.I_[t][pc.sector_desal] = pc.I_desal
         v.I_[t][pc.sector_wwater] = pc.I_wwater
-    elif ((v.pot_desal[t-1] + v.pot_wwater[t-1]) > v.water_use_total_national[t-1]) and (t > p.vision_2030_timing):
+    elif ((v.pot_desal[t-1] + v.pot_wwater[t-1]) > v.water_use_supply_mix[t-1]) and (t > p.vision_2030_timing):
         # Case: Overcapacity (Supply > Demand) AND outside Vision 2030 period -> Stop Investment
         v.I_[t][pc.sector_desal] = 0
         v.I_[t][pc.sector_wwater] = 0
@@ -50,14 +103,17 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
         policy_high_growth = (p.desalination_high_growth == 1) and (t <= p.vision_2030_timing)
         
         # Condition B: Demand Driven (Water Gap)
-        demand_high_growth = (v.water_use_total_national[t-1] > (v.pot_desal[t-1] + v.pot_wwater[t-1]))
+        demand_high_growth = (v.water_use_supply_mix[t-1] > (v.pot_desal[t-1] + v.pot_wwater[t-1]))
         
         use_high_growth = policy_high_growth or demand_high_growth
 
         # 2. Desalination Investment
         # Step A: Determine Base Investment
-        if v.I_[t-1][pc.sector_desal] > 0:
-            base_desal = v.I_[t-1][pc.sector_desal]
+        # The base is last period's own capacity investment (I_desal_cap), NOT v.I_[t-1], which also
+        # contains add-ons (energy efficiency etc., added in section 4). After a zero-investment year
+        # those tiny add-ons would otherwise become the base and investment would never recover.
+        if v.I_desal_cap[t-1] > 0:
+            base_desal = v.I_desal_cap[t-1]
         else: # if no investment in previous year, calculate based on depreciation
             base_desal = pc.δ_desal * v.K_[t-1][pc.sector_desal]
             
@@ -72,8 +128,8 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
 
         # 3. Wastewater Investment
         # Step A: Determine Base Investment
-        if v.I_[t-1][pc.sector_wwater] > 0:
-             base_wwater = v.I_[t-1][pc.sector_wwater]
+        if v.I_wwater_cap[t-1] > 0:
+             base_wwater = v.I_wwater_cap[t-1]
         else: # if no investment in previous year, calculate based on depreciation
              base_wwater = pc.δ_wwater * v.K_[t-1][pc.sector_wwater]
             
@@ -84,7 +140,28 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
             # Maturity Phase: Grow with the economy (Endogenous rate, typically 2-4%)
             # Same logic as desalination: Stabilize growth after 2030 unless gaps exist.
             v.I_[t][pc.sector_wwater] = base_wwater * (1 + v.gI_trend_endog[t])
-    
+
+    # 2.1 Requirement-based floor once groundwater has been phased out. From then on, desalination
+    # and reuse must supply all water demand, so their capital stock has to follow it: investment
+    # in t (capacity available in t+1, see K_ accumulation in model.py) covers the capacity
+    # required by expected demand in t+1. Before the phase-out, groundwater remains the residual.
+    if t > 2 and v.water_gw_phased_out[t-1] > 0:
+        # Demand without the reclaimed wastewater used for mitigation, which these sectors do not supply
+        _d1, _d2 = v.water_use_supply_mix[t-1], v.water_use_supply_mix[t-2]
+        _growth = _d1 / _d2 if _d2 > 0 else 1.0
+        expected_demand = _d1 * _growth ** 2
+        _pot = v.pot_desal[t-1] + v.pot_wwater[t-1]
+        _share_desal = v.pot_desal[t-1] / _pot if _pot > 0 else 0.5
+        for _s, _share, _p_m3, _eK, _u in (
+                (pc.sector_desal, _share_desal, pc.p_desal_m3, pc.eK_desal, pc.u_desal),
+                (pc.sector_wwater, 1 - _share_desal, pc.p_wwater_m3, pc.eK_wwater, pc.u_wwater)):
+            K_required = expected_demand * _share * _p_m3 / (_eK * _u)
+            K_next_without_I = (v.K_[t-1][_s] * (1 - pc.δ_[_s]) + v.I_[t-1][_s]) * (1 - pc.δ_[_s])
+            v.I_[t][_s] = max(v.I_[t][_s], K_required - K_next_without_I, 0.0)
+
+    # Own capacity investment of desalination and wastewater, before the add-ons of section 4
+    v.I_desal_cap[t] = v.I_[t][pc.sector_desal]
+    v.I_wwater_cap[t] = v.I_[t][pc.sector_wwater]
 
 
     ########################################################################################################################################################################################################################
@@ -93,8 +170,14 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
 # --------------------------------------------------------------------------------
     # --- UPDATED THEME 2: ELECTRICITY SECTOR BASELINE & GRID UPGRADES ---
     # --------------------------------------------------------------------------------
-    # 1. Total Base trend investment (derived from historical IO tables)
-    total_base_elec_inv = pc.I_[pc.electricity_gas_AC_sector] * (1 + v.gI_trend_endog[t])
+    # 1. Total Base trend investment: 2021 value from the IO tables, then growing with the trend rate
+    #    (November 2026 fix: it used to restart from the 2021 value every year)
+    if t == 1 or not hasattr(v, '_I_elec_base'):
+        v._I_elec_base = np.zeros(len(v.gI_trend_endog))
+        total_base_elec_inv = float(np.sum(pc.I_[pc.electricity_gas_AC_sector]))
+    else:
+        total_base_elec_inv = v._I_elec_base[t-1] * (1 + v.gI_trend_endog[t])
+    v._I_elec_base[t] = total_base_elec_inv
 
     # 2. Prevent Double-Counting (Removing baseline generation)
     generation_share_of_baseline = getattr(p, 'historical_generation_capex_share', 0.45) 
@@ -133,8 +216,9 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
         I_ALL_except_energy_desal_wwater = v.I_total[t-1]  - pc.I_desal - pc.I_wwater - pc.I_RE
     else:    
         # We must subtract EVERYTHING added in the previous year to find the true economic baseline
-        prev_netzero_total = (np.sum(v.I_netzero_ccs_[t-1]) + np.sum(v.I_netzero_nature_[t-1]) + 
-                              (np.sum(v.I_netzero_ccu_[t-1]) if hasattr(v, 'I_netzero_ccu_') else 0))
+        prev_netzero_total = (np.sum(v.I_netzero_ccs_[t-1]) + np.sum(v.I_netzero_nature_[t-1]) +
+                              (np.sum(v.I_netzero_ccu_[t-1]) if hasattr(v, 'I_netzero_ccu_') else 0) +
+                              np.sum(v.I_process_abatement_[t-1]))   # November 2026: process abatement, so it does not compound into trend investment
         
         # v.I_[t-1][sector] already INCLUDES the efficiency added in the previous period.
         # Subtracting v.I_efficiency_total[t-1] on top of that would double-count the efficiency
@@ -179,16 +263,8 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
             # Adjusted to subtract both desalination and wastewater initial investments
             v.I_[t][sectors_to_include] = I_ALL_except_energy_desal_wwater * (1 + v.gI_endog_[t][sectors_to_include]) * v.Sectoral_investment_distribution_[t][sectors_to_include]
         # Endogenous investment includes a scarcity constraint-induced additional investment mechanism, designed to alleviate scarcity constraints
-        # Before investment is determined: If investment in a maturing economy exceeds consumption, reduce average investment growth rate by an exogenous factor
-        if p.Endogenous_investment_reduction: # With a fixed factor and the amount of excess investment over consumption in percent to consumption
-            if np.sum(v.I_[t-1]) > v.C[t-1]:
-                if t==1:
-                    v.gI_trend_endog[t] = pc.gI_avg
-                else:
-                    v.gI_trend_endog[t] = v.gI_trend_endog[t-1] * p.investment_reduction_factor
-            else:
-                v.gI_trend_endog[t] = pc.gI_avg
-        else:
+        # The trend rate gI_trend_endog[t] is set by set_investment_trend() at the start of this function (t > 1)
+        if t == 1:
             v.gI_trend_endog[t] = pc.gI_avg
         if p.Endogenous_excess_import_reduction and p.Adapt_investment_production_scarcity: # Scarcity in production constraints enters investment growth rate next to import excess
             v.gI_endog_[t] = v.gI_trend_endog[t] * (1 + v.excess_import_[t-1]*p.import_excess_adjustment + v.supply_constraint_IntP_[t-1]*p.investment_scarcity_factor + v.supply_constraint_K_[t-1]*p.investment_scarcity_factor)
@@ -198,40 +274,9 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
         if t > 1: # Only for t > 1, as t=1 is handled above.
             v.I_[t][sectors_to_include] = I_ALL_except_energy_desal_wwater * (1 + v.gI_endog_[t][sectors_to_include]) * v.Sectoral_investment_distribution_[t][sectors_to_include]
     else:
-        if t == 1 or not getattr(p, 'Investment_exog_semi_endog_correction', False):
-            # Period 1 or correction disabled: use raw calibrated trend rate
+        # The trend rate gI_trend_endog[t] is set by set_investment_trend() at the start of this function (t > 1)
+        if t == 1:
             v.gI_trend_endog[t] = pc.gI_avg
-        else:
-            # ──────────────────────────────────────────────────────────────────
-            # Semi-endogenous Keynesian dampening of exogenous investment trend
-            # Motivation: even with an exogenous trend rate, large macro
-            # imbalances should moderate investment (Keynesian channel):
-            #   1. Gov deficit crowding-out: high deficit → higher borrowing
-            #      costs and reduced business confidence
-            #   2. Profit rate decline: lower retained earnings → less internal
-            #      finance available for new investment
-            # Both signals are measured at t-1, normalised to GDP, and combined
-            # additively into correction_factor ∈ [0,1] scaling pc.gI_avg.
-            # ──────────────────────────────────────────────────────────────────
-            gdp_t1 = max(np.sum(v.Y_[t-1]), 1.0)   # positive aggregate GDP denominator
-
-            # Signal 1: government deficit / GDP
-            gov_deficit       = v.Gov_exp[t-1] - v.Gov_rev[t-1]
-            gov_deficit_ratio = gov_deficit / gdp_t1
-            gov_threshold     = getattr(p, 'I_correction_gov_deficit_threshold', 0.05)
-            gov_sensitivity   = getattr(p, 'I_correction_gov_deficit_sensitivity', 2.0)
-            gov_correction    = max(0.0, gov_deficit_ratio - gov_threshold) * gov_sensitivity
-
-            # Signal 2: profit rate fall relative to calibrated initial level
-            profit_rate_now   = np.sum(v.P_[t-1]) / gdp_t1
-            profit_rate_init  = np.sum(pc.P_) / max(np.sum(pc.Y_), 1.0)
-            profit_gap        = max(0.0, profit_rate_init - profit_rate_now)
-            profit_sensitivity = getattr(p, 'I_correction_profit_sensitivity', 2.0)
-            profit_correction  = profit_gap * profit_sensitivity
-
-            # Combined: scale gI_trend down, bounded to [0, 1]
-            correction_factor   = max(0.0, 1.0 - gov_correction - profit_correction)
-            v.gI_trend_endog[t] = pc.gI_avg * correction_factor
 
         v.I_[t][sectors_to_include] = I_ALL_except_energy_desal_wwater * (1 + v.gI_trend_endog[t]) * v.Sectoral_investment_distribution_[t][sectors_to_include]
 
@@ -240,7 +285,7 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
     # 4. Consolidate all energy investments into the Sectoral Investment Vector (v.I_)
     #########################################################################################
     # A. Add the pre-calculated array investments
-    v.I_[t] = v.I_[t] + v.I_efficiency_[t] + v.I_netzero_ccs_[t] + v.I_netzero_nature_[t] + v.I_netzero_ccu_[t]
+    v.I_[t] = v.I_[t] + v.I_efficiency_[t] + v.I_netzero_ccs_[t] + v.I_netzero_nature_[t] + v.I_netzero_ccu_[t] + v.I_process_abatement_[t]
     
     # B. Assign Battery Storage Ownership (Owned by the Utility sector)
     v.I_[t][pc.electricity_gas_AC_sector] += v.I_storage[t]

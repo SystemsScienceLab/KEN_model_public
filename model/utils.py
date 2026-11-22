@@ -46,6 +46,17 @@ def libreoffice_int_to_datetime(days: int):
     return epoch_date + datetime.timedelta(days=days)
 
 
+def real_output_2021_prices(v, t: int):
+    """Real gross output of year t by sector, in 2021 prices: X / p, rebased to the 2021 price level.
+
+    Physical quantities (energy, electricity, water, process emissions) are intensities per unit of
+    2021 output times this real output. Nominal output X would let them grow with the price level.
+    In 2021 (t = 1) the result equals X, so the 2021 calibration of the intensities is unchanged.
+    """
+    p_t = v.p_[t]
+    return np.divide(v.X_[t] * v.p_[1], p_t, out=np.zeros_like(v.X_[t], dtype=float), where=p_t != 0)
+
+
 def to_float_or_nan(value):
     """Converts a string to a float, or NaN if it fails."""
     try:

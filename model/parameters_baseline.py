@@ -158,6 +158,10 @@ class ModelParameters:
     CCU_growth_rate: float                  # Annual growth of CCU capacity
     # 3. Remove (CCS & Nature)
     CCS_capacity_target_2035: float         # Target CCS capacity (Mt)
+    afforestation_case: str               # 'irrigated' (lower bound, default) or 'native_rainfed' (upper bound); energy_module.py
+    process_abatement_2060: dict            # Abatement share of process emission items in 2060 (linear rise from 2026); energy_module.process_emissions_and_abatement
+    process_emissions_frozen_technology: bool  # True: all process items follow real output, no abatement (sensitivity run)
+    hydrogen_cap_2060_mt: float             # Cap on total clean hydrogen in 2060 (Mt H2); 2.9 Mt 2030 and 4 Mt 2035 before (energy_module.hydrogen_cap_gj)
     CCS_cost_per_tonne: float               # Cost per tonne of CCS (SAR)
     nature_based_removal_target: float      # Target removal from Nature (Mt)
     # 4. Carbon Market
@@ -196,6 +200,18 @@ class ModelParameters:
     Gov_ext_assets_extraction: float     # Share of Gov_ext_assets_income extracted to Gov_rev; (1-this) reinvested into asset stock (0=full reinvestment, 1=full extraction)
     remittances_saudization_rate: float  # Annual decline in foreign-worker share of remittances (Saudization). 0=no effect, 0.015=1.5%/yr compounding
     gov_surplus_pif_rate: float          # Share of government fiscal surplus invested in PIF (Gov_ext_assets). 0=no reinvestment, 1=100% of surplus into PIF
+    # Agri-food value-chain coupling and agricultural water (water_module.compute_agr_supply)
+    agr_valuechain_coupling: bool        # Domestic agricultural output = crops + non-crop output + a domestic share of value-chain demand growth
+    agr_domestic_share_start: float      # Domestic sourcing share (delta) of agri-food demand growth beyond population, in 2021
+    agr_domestic_share_target: float     # Target domestic sourcing share (delta)
+    agr_domestic_share_target_year: int  # Model period t in which the target delta is reached (linear ramp from t=1 = 2021)
+    agr_increment_crop_share: float      # Crop share (theta) of the value-chain increment; 2021 non-fodder crop share of the sector
+    agr_increment_feed_domestic: float   # Share of the feed for additional livestock output grown domestically (fodder water)
+    agr_livestock_direct_water_intensity: float  # Direct livestock water use (drinking, servicing), m3 per 1000 SAR
+    agr_water_cap: float                 # Ceiling on agricultural water use in m3 (0 = no ceiling); binding cap truncates the domestic increment
+    agr_diet_demand_side: bool           # Apply the crop module's diet/food-waste factor to household demand for agricultural goods too
+    agr_price_indexing: bool             # Index agricultural output (crop module in 2021 prices) with the agricultural price index
+    water_supply_capacity_headroom: float  # Max. share by which desalination/reuse deliveries may exceed calibrated capacity after the groundwater phase-out
 
     @classmethod
     def default_values(cls):
@@ -319,7 +335,7 @@ class ModelParameters:
             net_emission_reduction_green_investments_exports_transformation = False,  # Set to True to run the Net Zero 2060 pathway
             vision_2030_target_CCU_SGI_Carbon =     True,     # Toggle for the specific Vision 2030 target implementation.
             vision_2030_renewable_target =          False,      # Set to True for the Vision 2030 scenario, False for the trend scenario
-            gRE_trend_rate =                        0.154,          # Annual renewable growth rate for the trend scenario.
+            gRE_trend_rate =                        0.154,          # No longer used: trend renewables now grow linearly (calibration.py, re_trend_annual_addition_gj).
             energy_sector_public_share =            0.8,        # 0.8 (80% public ownership of the energy sector in KSA); set to 0.5 for a more socialized energy sector
             enable_targeted_oil_reduction =         False,      # Oil reduction according to V2030, 95% until 2030 for three sectors (industries, power plant, desalination)
             oil_reduction_target_pct =              0.95,
@@ -395,6 +411,14 @@ class ModelParameters:
             CCU_growth_rate = 0.02,                 # 2% growth
 
             CCS_capacity_target_2035 = 44.0,        # 44 Mt target
+
+            afforestation_case = 'irrigated',       # Lower bound: all trees irrigated for life with leftover reclaimed wastewater. Upper bound: 'native_rainfed'.
+
+            process_abatement_2060 = {},   # no abatement (no-policy reference)
+
+            process_emissions_frozen_technology = False,
+
+            hydrogen_cap_2060_mt = 4.0,
             CCS_cost_per_tonne = 350.0,             # Approx (69+25)*3.75
             nature_based_removal_target = 278.0,    # 278 Mt (SGI target)
 
@@ -432,6 +456,19 @@ class ModelParameters:
             Gov_ext_assets_extraction = 0.5,        # 50% of Gov_ext_assets_income extracted to Gov_rev; 50% reinvested into asset stock
             remittances_saudization_rate = 0.0,     # Baseline: no Saudization effect
             gov_surplus_pif_rate = 0.0,              # Baseline: no PIF reinvestment
+
+            # --- AGRI-FOOD VALUE CHAIN & AGRICULTURAL WATER ---
+            agr_valuechain_coupling = True,          # Domestic agricultural output responds to value-chain demand
+            agr_domestic_share_start = 0.0,          # Baseline: agri-food demand growth beyond population is imported (no localisation);
+            agr_domestic_share_target = 0.0,         # keeps the baseline at its calibrated 2.66% GDP trend and the existing agricultural water path
+            agr_domestic_share_target_year = 1,
+            agr_increment_crop_share = 0.124,        # 2021 non-fodder crop share of agricultural output
+            agr_increment_feed_domestic = 1.0,       # Baseline: additional livestock fed with domestic fodder (BAU fodder SSR ~0.98)
+            agr_livestock_direct_water_intensity = 3.0,  # m3 per 1000 SAR; placeholder, to be verified with MEWA herd/water data
+            agr_water_cap = 0.0,                     # No ceiling on agricultural water
+            agr_diet_demand_side = False,
+            agr_price_indexing = True,
+            water_supply_capacity_headroom = 0.10,   # Deliveries up to 10% above calibrated desalination/reuse capacity; beyond that, capacity investment is needed
 
             ####################################################################################################################################################################
             # Not yet implemented — the following switch is defined but has no effect on model computation

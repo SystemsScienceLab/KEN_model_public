@@ -59,20 +59,13 @@ class WaterResultRunner(ExperimentRunner):
         from model.calibration import ParametersCalibrated
         pc = ParametersCalibrated(parameters, verbose=False, scenario_config=scenario_config)
         
-        # 2. Inject Agriculture Data (Demand & Intensity from water-crop module)
-        w_sc_name = water_module_scenarios.get(scenario, "BAU")
-        crop_X_dict, agr_intensity_dict, agr_invest, agr_om, agr_subsidy = get_agr_data(
-            w_sc_name, 2021, 2060, 
-            population_growth_rate=parameters.wage_population_growth_adjustment
-        )
-        
-        # Ensure data is formatted as arrays for the simulation
-        max_t = 41 # 2021 to 2060 inclusive
-        pc.crop_X = np.array([crop_X_dict.get(2021 + i, 0.0) for i in range(max_t)])
-        # Also need to set AGR_X as it is now required by replace_agr_X
-        pc.AGR_X = np.array([crop_X_dict.get(2021 + i, 0.0) / 0.34 if crop_X_dict.get(2021 + i, 0.0) > 0 else 0.0 for i in range(max_t)])
-        
-        pc.agr_water_use_intensity = np.array([agr_intensity_dict.get(2021 + i, 0.0) for i in range(max_t)])
+        # 2. Agriculture data (crop module, value-chain coupling, water) are set in
+        # ParametersCalibrated (calibration.py section 8.2) for the scenario's water-module
+        # scenario and population growth, so they are not re-injected here. Irrigation cost
+        # series for the plots ({Year: SAR}) are taken from there, for 2021-2060.
+        agr_invest = {y: v for y, v in pc.agr_irrigation_invest_dict.items() if y <= 2060}
+        agr_om = {y: v for y, v in pc.agr_irrigation_om_dict.items() if y <= 2060}
+        agr_subsidy = {y: v for y, v in pc.agr_irrigation_subsidy_dict.items() if y <= 2060}
 
         # 3. Inject Water Allocation Policy Parameters
         base_s, target_s, target_year = get_supply_mix_config(scenario_config)
@@ -112,7 +105,7 @@ LEGEND_FONT_SIZE = 18
 ANNOTATION_FONT_SIZE = 18
 SUB_LABEL_SIZE = 18
 
-def resolve_overlaps(points):
+def resolve_overlaps(points, ax=None):
     """Helper to prevent overlapping end-point annotations"""
     if not points: return []
     points.sort(key=lambda x: x['y'])
@@ -120,6 +113,11 @@ def resolve_overlaps(points):
     y_range = max(y_vals) - min(y_vals) if len(y_vals) > 1 else 1.0
     if y_range == 0: y_range = max(y_vals) * 0.1 if max(y_vals) > 0 else 1.0
     buffer = y_range * 0.08
+    # The labels have a fixed height on the page, so the gap has to be measured against the axis
+    # range: labels that are close together relative to it would otherwise still overlap
+    if ax is not None:
+        y_lo, y_hi = ax.get_ylim()
+        buffer = max(buffer, (y_hi - y_lo) * 0.075)
     for i in range(1, len(points)):
         prev = points[i-1]
         curr = points[i]
@@ -151,6 +149,7 @@ def plot_water_use_comparison(all_results):
         ('water_use_ind', 'Total Industrial Water Use'),
         ('water_use_ser', 'Total Service Water Use'),
         ('water_use_hh', 'Total Household Water Use'),
+        ('water_use_nexus', 'Water Use for Mitigation'),
         ('water_use_total_national', 'Total Water Use (Demand)')
     ]
     
@@ -172,7 +171,7 @@ def plot_water_use_comparison(all_results):
         
         # Apply non-overlapping annotations
         if endpoints_2060:
-            for p_annotate in resolve_overlaps(endpoints_2060):
+            for p_annotate in resolve_overlaps(endpoints_2060, ax):
                 ax.annotate(p_annotate['label'], xy=(2060, p_annotate['real_y']), xytext=(2061.2, p_annotate['y']), 
                             color=p_annotate['color'], fontweight='bold', fontsize=ANNOTATION_FONT_SIZE, va='center', ha='left',
                             arrowprops=dict(arrowstyle="-", color=p_annotate['color'], alpha=0.4) if abs(p_annotate['y']-p_annotate['real_y']) > 0.01 else None)
@@ -224,7 +223,8 @@ def plot_water_balance_verification(all_results):
         
         # Data in Billion m3
         desal = df["water_use_desal_tot"] / 1e9
-        wwater = df["water_use_wwater_tot"] / 1e9
+        # Reuse: deliveries of the reuse sector plus reclaimed wastewater used for mitigation
+        wwater = (df["water_use_wwater_tot"] + df["water_energy_wwater"]) / 1e9
         gw = df["water_use_gw_tot"] / 1e9
         total = df['water_use_total_national'] / 1e9
         
@@ -259,11 +259,12 @@ def plot_scenario_trends_comparison(all_results):
     scenarios = list(all_results.keys())
     years = all_results[scenarios[0]].index + 2020
     
+    # Reuse: deliveries of the reuse sector plus reclaimed wastewater used for mitigation
     metrics = {
-        "Total Water Supply": 'water_use_total_national',
-        "Desalination Supply": "water_use_desal_tot",
-        "Wastewater Reuse Supply": "water_use_wwater_tot",
-        "Groundwater Supply": "water_use_gw_tot"
+        "Total Water Supply": ['water_use_total_national'],
+        "Desalination Supply": ["water_use_desal_tot"],
+        "Wastewater Reuse Supply": ["water_use_wwater_tot", "water_energy_wwater"],
+        "Groundwater Supply": ["water_use_gw_tot"]
     }
     
     colors = {
@@ -273,12 +274,12 @@ def plot_scenario_trends_comparison(all_results):
         "Transformation": "#1f77b4",  # Blue
     }
     
-    for i, (title, var_name) in enumerate(metrics.items()):
+    for i, (title, var_names) in enumerate(metrics.items()):
         ax = axes[i]
         endpoints_2060 = []
         
         for sc in scenarios:
-            data = all_results[sc][var_name] / 1e9
+            data = all_results[sc][var_names].sum(axis=1) / 1e9
             ax.plot(years, data, label=SCENARIO_LABELS.get(sc, sc), color=colors.get(sc), linewidth=3)
             
             # Extract 2060 value for annotation
@@ -289,7 +290,7 @@ def plot_scenario_trends_comparison(all_results):
                 
         # Apply non-overlapping annotations
         if endpoints_2060:
-            for p_annotate in resolve_overlaps(endpoints_2060):
+            for p_annotate in resolve_overlaps(endpoints_2060, ax):
                 ax.annotate(p_annotate['label'], xy=(2060, p_annotate['real_y']), xytext=(2061.2, p_annotate['y']), 
                             color=p_annotate['color'], fontweight='bold', fontsize=ANNOTATION_FONT_SIZE, va='center', ha='left',
                             arrowprops=dict(arrowstyle="-", color=p_annotate['color'], alpha=0.4) if abs(p_annotate['y']-p_annotate['real_y']) > 0.01 else None)
@@ -446,7 +447,7 @@ def plot_irrigation_costs(all_results):
                 
         # Apply non-overlapping annotations
         if endpoints_2060:
-            for p_annotate in resolve_overlaps(endpoints_2060):
+            for p_annotate in resolve_overlaps(endpoints_2060, ax):
                 ax.annotate(p_annotate['label'], xy=(2060, p_annotate['real_y']), xytext=(2061.2, p_annotate['y']), 
                             color=p_annotate['color'], fontweight='bold', fontsize=ANNOTATION_FONT_SIZE, va='center', ha='left',
                             arrowprops=dict(arrowstyle="-", color=p_annotate['color'], alpha=0.4) if abs(p_annotate['y']-p_annotate['real_y']) > 0.01 else None)
@@ -473,6 +474,91 @@ def plot_irrigation_costs(all_results):
                  fontsize=SUB_LABEL_SIZE, fontweight='bold', va='top')
 
     plt.tight_layout()
+    plt.show()
+
+def plot_agri_trilemma(all_results, all_sectoral_results, agr_sector=0, save_path=None):
+    """
+    Plot 6: agri_trilemma_water_food_trade.pdf
+    Line plot: food self-sufficiency, agricultural imports and agricultural water use.
+    (a) Domestic agricultural output and (b) agricultural imports, both nominal (current prices)
+    like the other monetary figures, (c) agricultural water use with the 2021 level (cap of the
+    transformation scenario).
+    """
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+    axes = axes.flatten()
+
+    scenarios = list(all_results.keys())
+    years = all_results[scenarios[0]].index + 2020
+
+    colors = {
+        "Baseline":       "#d62728",  # Red
+        "Vision_2030":    "#ff7f0e",  # Orange
+        "Net_zero":       "#2ca02c",  # Green
+        "Transformation": "#1f77b4",  # Blue
+    }
+
+    # (title, y-axis label, data per scenario)
+    panels = [
+        ("Domestic Agricultural Output", "Billion SAR",
+         lambda sc: all_sectoral_results[sc]['X'].iloc[:, agr_sector] / 1e6),
+        ("Agricultural Imports", "Billion SAR",
+         lambda sc: all_sectoral_results[sc]['IM'].iloc[:, agr_sector] / 1e6),
+        ("Agricultural Water Use", "Billion m3",
+         lambda sc: all_results[sc]['water_use_agr'] / 1e9),
+    ]
+
+    for i, (title, ylabel, get_data) in enumerate(panels):
+        ax = axes[i]
+        endpoints_2060 = []
+
+        for sc in scenarios:
+            data = get_data(sc)
+            ax.plot(years, data, label=SCENARIO_LABELS.get(sc, sc), color=colors.get(sc), linewidth=2.5)
+
+            # Extract 2060 value for annotation
+            if 2060 in years:
+                idx_60 = np.where(years == 2060)[0][0]
+                val_60 = data.iloc[idx_60]
+                endpoints_2060.append({'y': val_60, 'real_y': val_60, 'label': f"{val_60:.1f}", 'color': colors.get(sc)})
+
+        # Agricultural water use: mark the 2021 level, the cap of the transformation scenario
+        if i == 2:
+            level_2021 = get_data(scenarios[0]).iloc[0]
+            ax.axhline(level_2021, color='gray', linestyle='--', linewidth=1.5)
+            ax.text(2047, level_2021, "2021 level (cap)", color='gray', fontsize=LABEL_FONT_SIZE - 2,
+                    ha='center', va='bottom')
+
+        # Apply non-overlapping annotations
+        if endpoints_2060:
+            for p_annotate in resolve_overlaps(endpoints_2060, ax):
+                ax.annotate(p_annotate['label'], xy=(2060, p_annotate['real_y']), xytext=(2061.2, p_annotate['y']),
+                            color=p_annotate['color'], fontweight='bold', fontsize=ANNOTATION_FONT_SIZE, va='center', ha='left',
+                            arrowprops=dict(arrowstyle="-", color=p_annotate['color'], alpha=0.4) if abs(p_annotate['y']-p_annotate['real_y']) > 0.01 else None)
+                ax.scatter([2060], [p_annotate['real_y']], color=p_annotate['color'], s=30, zorder=5)
+
+        ax.set_title(title, fontsize=TITLE_FONT_SIZE, fontweight='bold')
+        ax.set_ylabel(ylabel, fontweight='bold', fontsize=LABEL_FONT_SIZE)
+        ax.set_xlabel("Year", fontweight='bold', fontsize=LABEL_FONT_SIZE)
+
+        # Lock x-axis to 2060 limits
+        ax.set_xlim(years.min(), 2060)
+        ticks = ax.get_xticks()
+        ax.set_xticks(ticks[ticks <= 2060])
+
+        ax.tick_params(axis='both', labelsize=TICK_FONT_SIZE)
+        ax.grid(True, linestyle=':', alpha=0.6)
+
+        # Only show legend on the very first plot
+        if i == 0:
+            ax.legend(fontsize=LEGEND_FONT_SIZE, frameon=True, loc='upper left')
+
+    for _i, _ax in enumerate(axes):
+        _ax.text(-0.05, 1.05, f"({chr(ord('a') + _i)})", transform=_ax.transAxes,
+                 fontsize=SUB_LABEL_SIZE, fontweight='bold', va='top')
+
+    plt.tight_layout()
+    if save_path is not None:
+        fig.savefig(save_path, format='pdf', dpi=300, bbox_inches='tight')
     plt.show()
 
 # ==========================================
@@ -509,6 +595,7 @@ def plot_water_results():
     plot_scenario_trends_comparison(processed_results)
     plot_sectoral_supply_mix(processed_results, processed_sectoral)
     plot_irrigation_costs(processed_costs)
+    plot_agri_trilemma(processed_results, processed_sectoral)
     
     print("\n" + "="*50)
     print("All water resource results have been generated successfully.")

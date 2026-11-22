@@ -80,8 +80,10 @@ def plot_electricity_generation_mix(results: 'ModelResults'):
     elec_idx = pc.electricity_sector_idx
     
     # Get the historical/forced generation values for Oil and Gas
-    gas_for_elec_gj = sectoral["gas_use_final"][elec_idx]
-    oil_for_elec_gj = sectoral["oil_use_final"][elec_idx]
+    # The power sector's oil and gas use is fuel input; multiply by the plant efficiency to get
+    # the electricity generated from it.
+    gas_for_elec_gj = sectoral["gas_use_final"][elec_idx] * pc.power_plant_efficiency_gas
+    oil_for_elec_gj = sectoral["oil_use_final"][elec_idx] * pc.power_plant_efficiency_oil
     
     # Get the actual renewable generation (this is the one growing at 10%)
     re_for_elec_gj = macro["renewable_energy_generation"]
@@ -460,12 +462,14 @@ def plot_renewable_energy_assumptions(config: ModelConfig, T: int):
     GJ_TO_EJ = 1e-9 # Conversion factor from Gigajoules to Exajoules
 
     # --- 1. Calculate the Trend Scenario Pathway ---
-    # This simulates the simple exponential growth based on the trend rate parameter.
+    # Historical generation 2021-2025, then the linear trend used in the model
+    # (energy_investment_module.py: + pc.re_trend_annual_addition_gj per year).
     trend_generation = np.zeros(T)
-    if T > 0:
-        trend_generation[0] = pc.initial_RE_generation
-        for t in range(1, T):
-            trend_generation[t] = trend_generation[t-1] * (1 + p.gRE_trend_rate)
+    n_hist = min(T, len(pc.hist_power_years))
+    hist_re = pc.hist_power_solar_gj + pc.hist_power_wind_gj + pc.hist_power_bio_gj
+    trend_generation[:n_hist] = hist_re[:n_hist]
+    for t in range(n_hist, T):
+        trend_generation[t] = trend_generation[t-1] + pc.re_trend_annual_addition_gj
 
     # --- 2. Calculate the Vision 2030 Share Pathway ---
     # This visualizes the linear target path for the share of renewables until 2030.
@@ -5147,8 +5151,10 @@ def plot_energy_scenarios(exp_reports, start_year=2021):
     # FIGURE 1: CORE ENERGY VARIABLES
     # ==========================================================================
     vars_fig1 = [
-        ('total_energy_demand', 'Total Energy Demand', 'TWh', 1/3600000),
-        ('renewable_energy_share', 'Renewable Energy Share', '%', 100),
+        # (a), (b): final energy (non-power oil and gas plus electricity), without the double count of
+        # fossil electricity in total_energy_demand; (c), (d) include process and other non-combustion emissions
+        ('final_energy_demand', 'Final Energy Demand', 'TWh', 1/3600000),
+        ('renewable_share_final_energy', 'Renewable Energy Share', '%', 100),
         ('total_emissions', 'Total Gross Emissions', 'Mt CO2eq', 1),
         ('emissions_net_total', 'Total Net Emissions', 'Mt CO2eq', 1),
         ('oil_use_total', 'Total Oil Demand', 'EJ', 1e-9),
@@ -5174,15 +5180,17 @@ def plot_energy_scenarios(exp_reports, start_year=2021):
         elif ax_idx == 0 or ax_idx == 6: # plot a or g
             ax2 = ax.twinx()
             # Make the EJ axis label, ticks, and spine GREY
-            ax2.set_ylabel("EJ", fontweight='bold', fontsize=LABEL_FONT_SIZE, color='grey')
+            ax2.annotate("EJ", xy=(1.0, 1.01), xycoords='axes fraction', ha='center', va='bottom',
+                         fontweight='bold', fontsize=LABEL_FONT_SIZE, color='grey')
             ax2.tick_params(axis='y', labelsize=TICK_FONT_SIZE, colors='grey')
+            ax2.grid(False)  # gridlines come from the TWh axis only
             ax2.spines['right'].set_color('grey')
             
         endpoints_2060 = []
         midpoint_annotations = {2030: [], 2040: [], 2050: []}
         has_data = False
         
-        ax.text(-0.05, 1.05, f"({string.ascii_lowercase[ax_idx]})", transform=ax.transAxes, 
+        ax.text(-0.12, 1.07, f"({string.ascii_lowercase[ax_idx]})", transform=ax.transAxes, 
                 fontsize=SUB_LABEL_SIZE, fontweight='bold', va='top')
 
         for sc_idx, (sc_name, runs) in enumerate(exp_reports.items()):
@@ -5202,7 +5210,7 @@ def plot_energy_scenarios(exp_reports, start_year=2021):
                     for col in ['I_RE', 'I_hydrogen', 'I_electrification_total', 'I_storage', 'I_efficiency_total']:
                         if col in rm: val_sum += rm[col].values
                     if rs is not None:
-                        for key in ['I_netzero_nature', 'I_netzero_ccs', 'I_netzero_ccu', 'I_carbon_credits']:
+                        for key in ['I_netzero_nature', 'I_netzero_ccs', 'I_netzero_ccu', 'I_carbon_credits', 'I_process_abatement']:
                             if key in rs: val_sum += rs[key].sum(axis=1).values
                     series_vals = val_sum * factor
                     if 'Y' in rm.columns:
@@ -5231,11 +5239,7 @@ def plot_energy_scenarios(exp_reports, start_year=2021):
                 has_data = True
                 
                 # Plot secondary line ONLY for plots (a) and (g) [TWh to EJ conversion]
-                if (ax_idx == 0 or ax_idx == 6) and ax2 is not None:
-                    # 1 TWh = 0.0036 EJ
-                    series_vals_ej = series_vals * 0.0036
-                    # Zero-width sentinel line used only to scale the secondary grey axis
-                    ax2.plot(years, series_vals_ej, color=color, linewidth=0, alpha=0) 
+                # (The EJ axis of plots (a) and (g) is set from the TWh axis after the y-ticks, below.)
                 
                 # ======================================================================
                 # --- UNCERTAINTY BANDS LOGIC FOR EMISSIONS & INVESTMENT ---
@@ -5245,55 +5249,24 @@ def plot_energy_scenarios(exp_reports, start_year=2021):
                     if getattr(p, 'net_emission_reduction_green_investments_exports_transformation', False) or getattr(p, 'vision_2030_target_CCU_SGI_Carbon', False):
                         is_sgi_active = True
                 
-                # Uncertainty Band for Net Emissions (Graph d)
-                if is_sgi_active and sc_name not in ["Baseline", "Vision_2030"] and var_name == 'emissions_net_total':
-                    lower_bound = np.zeros_like(series_vals)
-                    upper_bound = np.zeros_like(series_vals)
-                    for i, y in enumerate(years):
-                        time_step = y - start_year + 1
-                        fraction = 0.0 if time_step <= 1 else ((time_step - 1) / 39.0 if time_step <= 40 else 1.0)
-                        
-                        mean_seq = 1.0 + (60.0 - 1.0) * (fraction ** 2)
-                        min_seq = 0.2 + (20.0 - 0.2) * (fraction ** 2)
-                        max_seq = 2.0 + (100.0 - 2.0) * (fraction ** 2)
-                        
-                        lower_bound[i] = series_vals[i] - (max_seq - mean_seq)
-                        upper_bound[i] = series_vals[i] + (mean_seq - min_seq)
-                        
-                    ax.fill_between(years, lower_bound, upper_bound, color=color, alpha=0.15, label=f"{sc_name} (NBS uncertainty)")
-                
-                # Uncertainty Band for Investment (Graph h)
-                if is_sgi_active and sc_name != "Baseline" and var_name == 'I_RE':
-                    lower_bound = np.zeros_like(series_vals)
-                    upper_bound = np.zeros_like(series_vals)
-                    c_factor = getattr(p, 'nature_cost_per_tonne', 50.0) * 1000.0 / 1000000.0 
-                    
-                    for i, y in enumerate(years):
-                        time_step = y - start_year + 1
-                        
-                        def get_cap(ts):
-                            if ts <= 1: return 1.0, 0.2, 2.0
-                            f = (ts - 1) / 39.0 if ts <= 40 else 1.0
-                            return (1.0 + (60.0 - 1.0)*(f**2), 0.2 + (20.0 - 0.2)*(f**2), 2.0 + (100.0 - 2.0)*(f**2))
-                        
-                        mean_c, min_c, max_c = get_cap(time_step)
-                        mean_p, min_p, max_p = get_cap(time_step - 1) if time_step > 1 else (0.0, 0.0, 0.0)
-                        
-                        inv_mean = max(0, mean_c - mean_p) * c_factor
-                        inv_min = max(0, min_c - min_p) * c_factor
-                        inv_max = max(0, max_c - max_p) * c_factor
-                        
-                        upper_bound[i] = series_vals[i] + (inv_max - inv_mean)
-                        lower_bound[i] = series_vals[i] - (inv_mean - inv_min)
-                        
-                    ax.fill_between(years, lower_bound, upper_bound, color=color, alpha=0.15)
+                # Band for net emissions (panel d): the line is the model run (afforestation lower bound:
+                # all trees irrigated with leftover reclaimed wastewater); the band reaches down to net
+                # emissions with the upper-bound afforestation case (rain-fed native trees added),
+                # v.flow_remove_nature_upper, computed in the same run (energy_module.py).
+                if is_sgi_active and sc_name not in ["Baseline", "Vision_2030"] and var_name == 'emissions_net_total'                         and 'flow_remove_nature_upper' in rm.columns:
+                    extra = np.maximum(0.0, rm['flow_remove_nature_upper'].values - rm['flow_remove_nature'].values) * factor
+                    ax.fill_between(years, series_vals - extra, series_vals, color=color, alpha=0.45,
+                                    label=f"{sc_name} (NBS uncertainty)")
+                    ax.plot(years, series_vals - extra, color=color, linewidth=1.0, linestyle=':')
                 # ======================================================================
 
                 # Plot secondary line ONLY for plot (b)
                 if ax_idx == 1 and ax2 is not None:
                     try:
                         elec_demand_total = rm['electricity_use_total'].values
-                        re_gen_total = rm['renewable_energy_generation'].values
+                        # Renewable electricity delivered to the grid: generation minus the electricity
+                        # used for electrolysis (dedicated capacity for process hydrogen, November 2026)
+                        re_gen_total = rm['renewable_energy_generation'].values - rm['re_used_for_hydrogen'].values
                         
                         re_met_demand = np.minimum(elec_demand_total, re_gen_total)
                         
@@ -5338,24 +5311,6 @@ def plot_energy_scenarios(exp_reports, start_year=2021):
                                 'y': v, 'real_y': v, 'label': f"{p_val:.1f}%", 'color': color, 'yr': target_yr
                             })
 
-        if endpoints_2060:
-            for p_annotate in resolve_overlaps(endpoints_2060, ax_idx):
-                
-                if ax_idx == 1:
-                    # Plot (b) annotations inside the plot (Right Aligned)
-                    ax.annotate(p_annotate['label'], xy=(2060, p_annotate['real_y']), xytext=(2058, p_annotate['y']), 
-                                color=p_annotate['color'], fontweight='bold', fontsize=ANNOTATION_FONT_SIZE,
-                                va='center', ha='right',
-                                arrowprops=dict(arrowstyle="-", color=p_annotate['color'], alpha=0.4) if abs(p_annotate['y']-p_annotate['real_y']) > 0.01 else None)
-                else:
-                    # All other plots annotations on the right side (Left Aligned)
-                    ax.annotate(p_annotate['label'], xy=(2060, p_annotate['real_y']), xytext=(2061.2, p_annotate['y']), 
-                                color=p_annotate['color'], fontweight='bold', fontsize=ANNOTATION_FONT_SIZE,
-                                va='center', ha='left',
-                                arrowprops=dict(arrowstyle="-", color=p_annotate['color'], alpha=0.4) if abs(p_annotate['y']-p_annotate['real_y']) > 0.01 else None)
-                                
-                ax.scatter([2060], [p_annotate['real_y']], color=p_annotate['color'], s=30, zorder=5)
-
         if var_name == 'I_RE':
             for yr, points in midpoint_annotations.items():
                 if not points: continue
@@ -5376,11 +5331,8 @@ def plot_energy_scenarios(exp_reports, start_year=2021):
         ax.tick_params(axis='both', labelsize=TICK_FONT_SIZE)
         
         # Set x-axis limit up to 2060
+        ax.set_xticks(np.arange(2025, 2061, 5))
         ax.set_xlim(start_year, 2060)
-        
-        # Ensure x-axis ticks do not exceed 2060
-        ticks = ax.get_xticks()
-        ax.set_xticks(ticks[ticks <= 2060])
         
         # Apply specific Y-axis ticks for Plot (a) and (g)
         if ax_idx == 0:
@@ -5391,6 +5343,38 @@ def plot_energy_scenarios(exp_reports, start_year=2021):
             ax.set_yticks([250, 750, 1250, 1750, 2250])
             if ax2 is not None:
                 ax2.set_yticks([1, 3, 5, 7, 9])
+
+        # EJ axis of plots (a) and (g): scaled exactly from the TWh axis (1 TWh = 0.0036 EJ)
+        if (ax_idx == 0 or ax_idx == 6) and ax2 is not None:
+            y0_, y1_ = ax.get_ylim()
+            ax2.set_ylim(y0_ * 0.0036, y1_ * 0.0036)
+
+        # --- End-point labels (after the y-limits are final) ---
+        if endpoints_2060:
+            y0_, y1_ = ax.get_ylim()
+            gap_ = (y1_ - y0_) * 0.07          # minimum vertical distance between labels
+            pts_ = sorted(endpoints_2060, key=lambda x: x['y'])
+            for i_ in range(1, len(pts_)):
+                if pts_[i_]['y'] - pts_[i_-1]['y'] < gap_:
+                    pts_[i_]['y'] = pts_[i_-1]['y'] + gap_
+            if pts_[-1]['y'] > y1_ - gap_ / 2:
+                shift_ = pts_[-1]['y'] - (y1_ - gap_ / 2)
+                for pt_ in pts_: pt_['y'] -= shift_
+            for p_annotate in pts_:
+                if ax_idx == 1:
+                    # Plot (b) annotations inside the plot (Right Aligned)
+                    xytext_, coords_, ha_ = (2058, p_annotate['y']), 'data', 'right'
+                elif ax_idx == 0 or ax_idx == 6:
+                    # Plots (a) and (g): right of the EJ tick labels
+                    xytext_, coords_, ha_ = (1.15, p_annotate['y']), ('axes fraction', 'data'), 'left'
+                else:
+                    xytext_, coords_, ha_ = (2061.2, p_annotate['y']), 'data', 'left'
+                ax.annotate(p_annotate['label'], xy=(2060, p_annotate['real_y']), xytext=xytext_, textcoords=coords_,
+                            color=p_annotate['color'], fontweight='bold', fontsize=ANNOTATION_FONT_SIZE,
+                            va='center', ha=ha_, annotation_clip=False,
+                            arrowprops=dict(arrowstyle="-", color=p_annotate['color'], alpha=0.4)
+                            if abs(p_annotate['y'] - p_annotate['real_y']) > 1e-9 else None)
+                ax.scatter([2060], [p_annotate['real_y']], color=p_annotate['color'], s=30, zorder=5, clip_on=False)
         
         # --- Specific Legend Rules ---
         if has_data: 
@@ -5453,9 +5437,12 @@ def plot_nexus_water_all_scenarios(exp_reports, start_year=2021):
     
     # Create EJ secondary axis for plot b (ax2)
     ax2_ej = ax2.twinx()
-    ax2_ej.set_ylabel("EJ", fontweight='bold', fontsize=LABEL_FONT_SIZE, color='grey')
+    # Unit label above the axis, so it does not collide with the end-point labels at the right
+    ax2_ej.annotate("EJ", xy=(1.0, 1.01), xycoords='axes fraction', ha='center', va='bottom',
+                    fontweight='bold', fontsize=LABEL_FONT_SIZE, color='grey')
     ax2_ej.tick_params(axis='y', labelsize=TICK_FONT_SIZE, colors='grey')
     ax2_ej.spines['right'].set_color('grey')
+    ax2_ej.grid(False)  # gridlines come from the TWh axis only
     
     has_data = False
     
@@ -5522,6 +5509,10 @@ def plot_nexus_water_all_scenarios(exp_reports, start_year=2021):
         water_sgi = sgi_flow * wi_sgi_bm3_per_mt
         
         total_nexus_water_bm3 = water_solar + water_wind + water_h2 + water_elec + water_ccs + water_ccu + water_sgi
+        # The model's own series is used where available, so that the figure shows the mitigation
+        # water that is part of the national water balance (water_use_total_national)
+        if 'water_use_nexus' in rm:
+            total_nexus_water_bm3 = rm['water_use_nexus'].values * 1e-9
         
         # ----------------------------------------------------------------------
         # B. Calculate Energy for Water (TWh)
@@ -5548,6 +5539,8 @@ def plot_nexus_water_all_scenarios(exp_reports, start_year=2021):
         
         total_energy_gj = energy_desal_gj + energy_gw_gj + energy_ww_gj
         total_energy_twh = total_energy_gj / 3600000.0  # Convert GJ to TWh
+        if 'electricity_nexus_water_total' in rm:
+            total_energy_twh = rm['electricity_nexus_water_total'].values / 3600000.0
         
         # ----------------------------------------------------------------------
         # C. Plotting
@@ -5573,8 +5566,6 @@ def plot_nexus_water_all_scenarios(exp_reports, start_year=2021):
             # Plot 2: Energy for Water
             ax2.plot(years, smoothed_energy, label=sc_name, color=color, linewidth=3.0)
             
-            # Zero-width sentinel line for scaling the EJ secondary axis (1 TWh = 0.0036 EJ)
-            ax2_ej.plot(years, smoothed_energy * 0.0036, color=color, linewidth=0, alpha=0)
             
             has_data = True
             
@@ -5588,36 +5579,6 @@ def plot_nexus_water_all_scenarios(exp_reports, start_year=2021):
                 val_energy_60 = smoothed_energy[idx_60]
                 endpoints_ax2.append({'y': val_energy_60, 'real_y': val_energy_60, 'label': f"{val_energy_60:.3f} TWh", 'color': color})
 
-    # --- Overlap Resolution Helper ---
-    def resolve_overlaps(points):
-        if not points: return []
-        points.sort(key=lambda x: x['y'])
-        y_vals = [p['y'] for p in points]
-        y_range = max(y_vals) - min(y_vals) if len(y_vals) > 1 else 1.0
-        if y_range == 0: y_range = max(y_vals) * 0.1 if max(y_vals) > 0 else 1.0
-        buffer = y_range * 0.08
-        for i in range(1, len(points)):
-            prev = points[i-1]
-            curr = points[i]
-            if curr['y'] - prev['y'] < buffer:
-                curr['y'] = prev['y'] + buffer
-        return points
-
-    # --- Apply Annotations ---
-    if endpoints_ax1:
-        for p_annotate in resolve_overlaps(endpoints_ax1):
-            ax1.annotate(p_annotate['label'], xy=(2060, p_annotate['real_y']), xytext=(2061.2, p_annotate['y']), 
-                         color=p_annotate['color'], fontweight='bold', fontsize=ANNOTATION_FONT_SIZE, va='center', ha='left',
-                         arrowprops=dict(arrowstyle="-", color=p_annotate['color'], alpha=0.4) if abs(p_annotate['y']-p_annotate['real_y']) > 0.01 else None)
-            ax1.scatter([2060], [p_annotate['real_y']], color=p_annotate['color'], s=40, zorder=5)
-
-    if endpoints_ax2:
-        for p_annotate in resolve_overlaps(endpoints_ax2):
-            ax2.annotate(p_annotate['label'], xy=(2060, p_annotate['real_y']), xytext=(2061.2, p_annotate['y']), 
-                         color=p_annotate['color'], fontweight='bold', fontsize=ANNOTATION_FONT_SIZE, va='center', ha='left',
-                         arrowprops=dict(arrowstyle="-", color=p_annotate['color'], alpha=0.4) if abs(p_annotate['y']-p_annotate['real_y']) > 0.01 else None)
-            ax2.scatter([2060], [p_annotate['real_y']], color=p_annotate['color'], s=40, zorder=5)
-
     # --- Final Formatting ---
     if has_data:
         # Format ax1 (Water)
@@ -5626,9 +5587,8 @@ def plot_nexus_water_all_scenarios(exp_reports, start_year=2021):
         ax1.set_xlabel("Year", fontweight='bold', fontsize=LABEL_FONT_SIZE)
         
         # Restrict to 2060 limits
+        ax1.set_xticks(np.arange(2025, 2061, 5))
         ax1.set_xlim(start_year, 2060)
-        ticks1 = ax1.get_xticks()
-        ax1.set_xticks(ticks1[ticks1 <= 2060])
         
         # Apply 20% buffer to the global maximum water value
         if global_max_water > 0:
@@ -5643,9 +5603,8 @@ def plot_nexus_water_all_scenarios(exp_reports, start_year=2021):
         ax2.set_xlabel("Year", fontweight='bold', fontsize=LABEL_FONT_SIZE)
         
         # Restrict to 2060 limits
+        ax2.set_xticks(np.arange(2025, 2061, 5))
         ax2.set_xlim(start_year, 2060)
-        ticks2 = ax2.get_xticks()
-        ax2.set_xticks(ticks2[ticks2 <= 2060])
         
         # Apply 20% buffer to the global maximum energy value
         if global_max_energy > 0:
@@ -5654,7 +5613,43 @@ def plot_nexus_water_all_scenarios(exp_reports, start_year=2021):
         ax2.tick_params(axis='both', labelsize=TICK_FONT_SIZE)
         # Legend explicitly removed from ax2
         
+    # --- End-point labels (after the y-limits are set) ---
+    def resolve_overlaps(points, ax, min_gap_frac=0.07):
+        """Spread labels so that neighbours are at least min_gap_frac of the axis height apart."""
+        if not points: return []
+        y0, y1 = ax.get_ylim()
+        gap = (y1 - y0) * min_gap_frac
+        points.sort(key=lambda x: x['y'])
+        for i in range(1, len(points)):
+            if points[i]['y'] - points[i-1]['y'] < gap:
+                points[i]['y'] = points[i-1]['y'] + gap
+        top = y1 - gap / 2   # keep the highest label inside the axis; shift the stack down if needed
+        if points[-1]['y'] > top:
+            shift = points[-1]['y'] - top
+            for pt in points: pt['y'] -= shift
+        return points
+
+    def annotate_endpoints(ax, points, x_text, text_coords):
+        for pt in resolve_overlaps(points, ax):
+            ax.annotate(pt['label'], xy=(2060, pt['real_y']), xytext=(x_text, pt['y']), textcoords=text_coords,
+                        color=pt['color'], fontweight='bold', fontsize=ANNOTATION_FONT_SIZE, va='center', ha='left',
+                        annotation_clip=False,
+                        arrowprops=dict(arrowstyle="-", color=pt['color'], alpha=0.4)
+                        if abs(pt['y'] - pt['real_y']) > 1e-9 else None)
+            ax.scatter([2060], [pt['real_y']], color=pt['color'], s=40, zorder=5, clip_on=False)
+
+    if has_data:
+        # Panel (a): labels just right of the plot area
+        annotate_endpoints(ax1, endpoints_ax1, 2061.2, 'data')
+        # Panel (b): EJ axis scaled exactly from the TWh axis (1 TWh = 0.0036 EJ), labels right of its tick labels
+        y0, y1 = ax2.get_ylim()
+        ax2_ej.set_ylim(y0 * 0.0036, y1 * 0.0036)
+        annotate_endpoints(ax2, endpoints_ax2, 1.17, ('axes fraction', 'data'))
+
+    fig.text(0.5, -0.02, "Lines show 5-year centred moving averages of annual model results.",
+             ha='center', va='top', fontsize=LABEL_FONT_SIZE - 2, style='italic', color='dimgrey')
     plt.tight_layout()
+    plt.subplots_adjust(wspace=0.55)
     plt.show()
 
 
@@ -5755,7 +5750,7 @@ def plot_energy_scenarios_2(exp_reports, start_year=2021):
                     for col in ['I_RE', 'I_hydrogen', 'I_electrification_total', 'I_storage', 'I_efficiency_total']:
                         if col in rm: val_sum += rm[col].values
                     if rs is not None:
-                        for key in ['I_netzero_nature', 'I_netzero_ccs', 'I_netzero_ccu', 'I_carbon_credits']:
+                        for key in ['I_netzero_nature', 'I_netzero_ccs', 'I_netzero_ccu', 'I_carbon_credits', 'I_process_abatement']:
                             if key in rs: val_sum += rs[key].sum(axis=1).values
                     series_vals = val_sum * factor
                     if 'Y' in rm.columns:
@@ -7855,3 +7850,99 @@ def run_and_plot_sectoral_analysis(exp):
 
     except Exception as e:
         print(f"❌ Heatmap Failed: {e}")
+
+# ======================================================================================================
+# Figures for the SI, November 2026: they work on the saved run reports (dict of scenario -> [report])
+# ======================================================================================================
+def plot_liquid_displacement(results, save_path=None):
+    """Financial and emission effect of the liquid displacement programme in Vision 2030 and Transformation.
+
+    Only the fuel switch is counted (November 2026; the earlier plot_oil_and_gas_switching_intuitive took
+    original minus final oil and gas use over all targeted sectors, including the power sector, and so
+    also counted renewables, electrification and efficiency):
+      - outside the power sector: oil replaced one to one by gas (v.liquid_displaced_oil_gj),
+      - in the power sector: electricity generated from gas instead of oil, against the 2023 oil share of
+        fossil generation (v.liquid_displaced_power_elec_gj); fuel input with the plant efficiencies.
+    Fuels are valued at the 2021 unit value of oil and gas output (output of the extraction sector per GJ
+    of oil and gas used), gas at 70% of oil per GJ, so values are in 2021 prices."""
+    import matplotlib.pyplot as plt
+    import numpy as np
+    GAS_PRICE_DISCOUNT = 0.7
+    scen = [("Vision_2030", "(a) Vision 2030"), ("Transformation", "(b) Transformation")]
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    out = {}
+    for ax, (sc, title) in zip(axes, scen):
+        rep = results[sc][0]
+        m, pc = rep["results_macro"], rep["parameters_calibrated"]
+        years = np.array(m.index) + 2020
+        D = np.asarray(m["liquid_displaced_oil_gj"], dtype=float)          # GJ oil -> gas, non-power
+        E = np.asarray(m["liquid_displaced_power_elec_gj"], dtype=float)   # GJ electricity, oil -> gas
+        eo, eg = pc.power_plant_efficiency_oil, pc.power_plant_efficiency_gas
+        oil_saved = D + E / eo
+        gas_added = D + E / eg
+        idx_mining = pc.sectors.index('Extraction of crude petroleum and natural gas')
+        price_oil = pc.X_[idx_mining] / np.sum((pc.oil_intensities_ + pc.gas_intensities_) * pc.X_)  # thousand SAR per GJ
+        price_gas = price_oil * GAS_PRICE_DISCOUNT
+        net_saving_bn = (oil_saved * price_oil - gas_added * price_gas) / 1e6
+        avoided_mt = oil_saved * pc.oil_emission_factor - gas_added * pc.gas_emission_factor
+        out[sc] = dict(years=years, net_saving_bn=net_saving_bn, avoided_mt=avoided_mt,
+                       oil_saved_ej=oil_saved / 1e9, gas_added_ej=gas_added / 1e9)
+        sel = years <= 2060
+        ax.bar(years[sel], net_saving_bn[sel], color="#2ca02c", alpha=0.75, label="Net fuel cost saving (bn SAR, 2021 prices)")
+        ax.set_title(title, fontsize=14, fontweight="bold", loc="left")
+        ax.set_xlabel("Year", fontsize=12)
+        ax.set_ylabel("Net fuel cost saving (bn SAR)", fontsize=12)
+        ax.grid(axis="y", linestyle="--", alpha=0.3)
+        ax2 = ax.twinx()
+        ax2.plot(years[sel], avoided_mt[sel], color="#1f77b4", lw=2.5, marker="o", ms=3, label="Avoided emissions (MtCO$_2$)")
+        ax2.set_ylabel("Avoided emissions (MtCO$_2$ per year)", fontsize=12, color="#1f77b4")
+        ax2.tick_params(axis="y", labelcolor="#1f77b4")
+        ax.set_ylim(0, max(1.0, np.nanmax(net_saving_bn[sel]) * 1.15))
+        ax2.set_ylim(0, max(1.0, np.nanmax(avoided_mt[sel]) * 1.15))
+        for a in (ax, ax2):
+            a.tick_params(labelsize=11)
+        if sc == "Vision_2030":
+            h1, l1 = ax.get_legend_handles_labels(); h2, l2 = ax2.get_legend_handles_labels()
+            ax.legend(h1 + h2, l1 + l2, loc="upper left", fontsize=11, frameon=True)
+    fig.tight_layout()
+    if save_path:
+        fig.savefig(save_path, format="pdf", bbox_inches="tight")
+    plt.show()
+    return out
+
+
+def plot_electrification_sectors(results, save_path=None):
+    """Sector selection for electrification (Transformation scenario): the 25 sectors with the highest
+    oil and gas intensity (power sector excluded); the 13 targets highlighted, air and water transport
+    marked as excluded (November 2026)."""
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from matplotlib.patches import Patch
+    pc = results["Transformation"][0]["parameters_calibrated"]
+    gas, oil = np.asarray(pc.gas_intensities_), np.asarray(pc.oil_intensities_)
+    idx = [i for i in range(len(pc.sectors)) if i != pc.electricity_sector_idx]
+    idx = sorted(idx, key=lambda i: gas[i] + oil[i])[-25:]
+    targets = set(int(i) for i in pc.electrification_target_sectors)
+    excluded = {pc.sectors.index('Air transport'), pc.sectors.index('Water transport')}
+    fig, ax = plt.subplots(figsize=(12, 10))
+    y = np.arange(len(idx))
+    ax.barh(y, gas[idx], color="#1f77b4", alpha=0.6)
+    ax.barh(y, oil[idx], left=gas[idx], color="#2ca02c", alpha=0.6)
+    for k, i in enumerate(idx):
+        if i in targets:
+            ax.barh(y[k], gas[i] + oil[i], color="none", edgecolor="#ff7f0e", linewidth=2.5)
+        elif i in excluded:
+            ax.barh(y[k], gas[i] + oil[i], color="none", edgecolor="#d62728", linewidth=2, hatch="//")
+    ax.set_yticks(y)
+    ax.set_yticklabels([pc.sectors[i][:60] for i in idx], fontsize=10)
+    ax.set_xlabel("Oil and gas intensity (GJ per thousand SAR of output)", fontsize=12, fontweight="bold")
+    ax.grid(axis="x", linestyle="--", alpha=0.3)
+    ax.legend(handles=[Patch(color="#1f77b4", alpha=0.6, label="Gas intensity"),
+                       Patch(color="#2ca02c", alpha=0.6, label="Oil intensity"),
+                       Patch(facecolor="none", edgecolor="#ff7f0e", linewidth=2.5, label="Electrification target (13 sectors)"),
+                       Patch(facecolor="none", edgecolor="#d62728", hatch="//", label="Among top 15, not electrified (aviation, shipping)")],
+              loc="lower right", fontsize=11)
+    fig.tight_layout()
+    if save_path:
+        fig.savefig(save_path, format="pdf", bbox_inches="tight")
+    plt.show()
