@@ -561,6 +561,96 @@ def plot_agri_trilemma(all_results, all_sectoral_results, agr_sector=0, save_pat
         fig.savefig(save_path, format='pdf', dpi=300, bbox_inches='tight')
     plt.show()
 
+def plot_water_main(all_results, all_sectoral_results, agr_sector=0, last_year=2060):
+    """
+    Water, food and trade by scenario, 2021-2060 (one 4 x 2 figure, main figure of the paper).
+    Takes the same inputs as plot_agri_trilemma (dicts scenario -> results_macro and
+    scenario -> results_sectoral), so no scenario is re-run.
+
+    (a) domestic agricultural output, (b) agricultural imports (both billion SAR, nominal),
+    (c) domestic share of agricultural supply X / (X + IM), in %,
+    (d) agricultural water use with the 2021 level (cap of the transformation scenario),
+    (e) total water use, (f) groundwater, (g) desalination,
+    (h) treated wastewater reuse delivered to water users (without reclaimed water used for
+        mitigation, which is in water_energy_wwater), all in billion m3.
+    """
+    from model.experiment_plots import MAIN_FIGURE_LABELS, MAIN_FIGURE_COLORS
+
+    t_last = last_year - 2020
+    scenarios = list(all_results.keys())
+    macro = {sc: all_results[sc].loc[:t_last] for sc in scenarios}
+    sect = {sc: {k: all_sectoral_results[sc][k].loc[:t_last] for k in ('X', 'IM')} for sc in scenarios}
+    years = macro[scenarios[0]].index + 2020
+
+    def _agr(sc, key):
+        return sect[sc][key].iloc[:, agr_sector]
+
+    # (title, y label, data per scenario, number format)
+    panels = [
+        ("Domestic agricultural output", "Billion SAR",
+         lambda sc: _agr(sc, 'X') / 1e6, "{:.0f}"),
+        ("Agricultural imports", "Billion SAR",
+         lambda sc: _agr(sc, 'IM') / 1e6, "{:.0f}"),
+        ("Domestic share of agricultural supply", "%",
+         lambda sc: _agr(sc, 'X') / (_agr(sc, 'X') + _agr(sc, 'IM')) * 100, "{:.1f}%"),
+        ("Agricultural water use", "Billion m$^3$",
+         lambda sc: macro[sc]['water_use_agr'] / 1e9, "{:.1f}"),
+        ("Total water use", "Billion m$^3$",
+         lambda sc: macro[sc]['water_use_total_national'] / 1e9, "{:.1f}"),
+        ("Groundwater", "Billion m$^3$",
+         lambda sc: macro[sc]['water_use_gw_tot'] / 1e9, "{:.1f}"),
+        ("Desalination", "Billion m$^3$",
+         lambda sc: macro[sc]['water_use_desal_tot'] / 1e9, "{:.1f}"),
+        ("Wastewater reuse", "Billion m$^3$",
+         lambda sc: macro[sc]['water_use_wwater_tot'] / 1e9, "{:.1f}"),
+    ]
+
+    fig, axes = plt.subplots(4, 2, figsize=(14, 17))
+    axes = axes.flatten()
+
+    for i, (title, ylabel, get_data, fmt) in enumerate(panels):
+        ax = axes[i]
+        endpoints = []
+        for sc in scenarios:
+            data = get_data(sc)
+            color = MAIN_FIGURE_COLORS.get(sc)
+            ax.plot(years, data, label=MAIN_FIGURE_LABELS.get(sc, sc), color=color, linewidth=2.2)
+            val = data.iloc[-1]
+            endpoints.append({'y': val, 'real_y': val, 'label': fmt.format(val), 'color': color})
+
+        # Agricultural water use: mark the 2021 level, the cap of the transformation scenario
+        if i == 3:
+            level_2021 = get_data(scenarios[0]).iloc[0]
+            ax.axhline(level_2021, color='gray', linestyle='--', linewidth=1.4)
+            ax.text(2047, level_2021, "2021 level (cap)", color='gray', fontsize=13,
+                    ha='center', va='bottom')
+
+        for p in resolve_overlaps(endpoints, ax):
+            ax.annotate(p['label'], xy=(years[-1], p['real_y']), xytext=(years[-1] + 1.2, p['y']),
+                        color=p['color'], fontweight='bold', fontsize=15, va='center', ha='left',
+                        arrowprops=dict(arrowstyle="-", color=p['color'], alpha=0.4)
+                        if abs(p['y'] - p['real_y']) > 1e-9 else None)
+            ax.scatter([years[-1]], [p['real_y']], color=p['color'], s=22, zorder=5)
+
+        ax.set_title(title, fontsize=16, fontweight='bold')
+        ax.set_ylabel(ylabel, fontweight='bold', fontsize=15)
+        if i >= 6:
+            ax.set_xlabel("Year", fontweight='bold', fontsize=15)
+        ticks = [2021] + list(range(2025, int(years[-1]) + 1, 5))
+        ax.set_xticks(ticks)
+        ax.set_xticklabels(ticks, fontsize=13)
+        ax.set_xlim(years.min() - 1, years.max() + 7)
+        ax.tick_params(axis='y', labelsize=14)
+        ax.grid(True, linestyle=':', alpha=0.6)
+        if i == 0:
+            ax.legend(fontsize=14, frameon=True, loc='upper left')
+        ax.text(-0.06, 1.06, f"({chr(ord('a') + i)})", transform=ax.transAxes,
+                fontsize=16, fontweight='bold', va='top')
+
+    plt.tight_layout()
+    plt.show()
+
+
 # ==========================================
 # 3. MAIN EXECUTION
 # ==========================================

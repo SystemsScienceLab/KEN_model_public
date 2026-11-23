@@ -1822,3 +1822,158 @@ def plot_sectoral_prices_comparison(reports, n_sectors=9):
     plt.show()
 
 # plot_material_flows_comparison and plot_material_stocks_comparison removed for public release
+
+
+# =============================================================================
+# MAIN MACROECONOMIC VARIABLES  (4 x 2, main figure of the paper)
+# =============================================================================
+
+# Display names for the compact main figures (scenario keys stay unchanged)
+MAIN_FIGURE_LABELS = {
+    "Baseline":       "Baseline",
+    "Vision_2030":    "Vision 2030",
+    "Transformation": "Transformation",
+}
+
+MAIN_FIGURE_COLORS = {
+    "Baseline":       "#d62728",  # Red
+    "Vision_2030":    "#ff7f0e",  # Orange
+    "Net_zero":       "#2ca02c",  # Green
+    "Transformation": "#1f77b4",  # Blue
+    "Steady_state":   "#7f7f7f",  # Grey
+}
+
+
+def _place_main_labels(ax, annots, x_base, ha):
+    """Value labels at the line ends of the main figures. The minimum gap is measured
+    against the axis range, since the labels have a fixed height on the page."""
+    if not annots:
+        return
+    y_lo, y_hi = ax.get_ylim()
+    gap = (y_hi - y_lo) * 0.065
+    pts = sorted([dict(p) for p in annots], key=lambda p: p['y'])
+    for i in range(1, len(pts)):
+        if pts[i]['y'] - pts[i - 1]['y'] < gap:
+            pts[i]['y'] = pts[i - 1]['y'] + gap
+    dx = 1.2 if ha == 'left' else -1.0
+    for p in pts:
+        moved = abs(p['y'] - p['real_y']) > gap * 0.3
+        ax.annotate(p['label'], xy=(x_base, p['real_y']), xytext=(x_base + dx, p['y']),
+                    color=p['color'], fontsize=15, fontweight='bold', ha=ha, va='center',
+                    arrowprops=dict(arrowstyle='-', color=p['color'], lw=0.7, alpha=0.5) if moved else None)
+
+
+def plot_main_macro_variables(reports, last_year=2060):
+    """
+    Main macroeconomic variables by scenario, 2021-2060 (one 4 x 2 figure).
+
+    Colour = scenario, line style = variable (solid = first, dashed = second variable).
+    (a) GDP in trillion SAR, all other panels in % of nominal GDP of the same year. Labels at the right give the 2060 values, labels at the
+    left the 2021 value of the baseline (single-variable panels only).
+
+    (a) GDP Y
+    (b) non-oil share of GDP, Y_non_oil / Y
+    (c) oil exports EX_oil (solid) and non-oil exports EX - EX_oil (dashed), / Y
+    (d) imports IM / Y
+    (e) investment I_total / Y
+    (f) government revenue Gov_rev (solid) and total expenditure Gov_exp (dashed), / Y.
+        Total expenditure includes debt service (interest and amortisation), so the gap
+        between the lines is the fiscal balance including amortisation.
+    (g) current account (solid) and trade balance (dashed), / Y
+    (h) government net wealth Gov_net_wealth (solid) and government external assets
+        Gov_ext_assets (SAMA reserves and PIF foreign assets, dashed), / Y
+    """
+    from matplotlib.lines import Line2D
+
+    reports = _truncate_reports(reports, last_year)
+    TN = 1_000_000_000  # thousand SAR -> trillion SAR
+
+    def _level(col):
+        return lambda m: m[col].values / TN
+
+    def _share(fn):
+        return lambda m: fn(m) / m['Y'].values * 100
+
+    _ex_oil = lambda m: m['EX_oil'].values
+    _ex_non_oil = lambda m: m['EX'].values - m['EX_oil'].values
+
+    # (title, y label, [(variable label, function of results_macro)], unit, zero line)
+    panels = [
+        ("GDP", "Trillion SAR",
+         [("GDP", _level('Y'))], 'T', False),
+        ("Non-oil share of GDP", "% of GDP",
+         [("Non-oil GDP", _share(lambda m: m['Y_non_oil'].values))], '%', False),
+        ("Oil and non-oil exports", "% of GDP",
+         [("Oil exports", _share(_ex_oil)),
+          ("Non-oil exports", _share(_ex_non_oil))], '%', False),
+        ("Imports", "% of GDP",
+         [("Imports", _share(lambda m: m['IM'].values))], '%', False),
+        ("Investment", "% of GDP",
+         [("Investment", _share(lambda m: m['I_total'].values))], '%', False),
+        ("Government revenue and expenditure", "% of GDP",
+         [("Revenue", _share(lambda m: m['Gov_rev'].values)),
+          ("Total expenditure", _share(lambda m: m['Gov_exp'].values))], '%', False),
+        ("Current account and trade balance", "% of GDP",
+         [("Current account", _share(lambda m: m['current_account'].values)),
+          ("Trade balance", _share(lambda m: m['trade_balance'].values))], '%', True),
+        ("Government net wealth and external assets", "% of GDP",
+         [("Net wealth", _share(lambda m: m['Gov_net_wealth'].values)),
+          ("External assets", _share(lambda m: m['Gov_ext_assets'].values))], '%', True),
+    ]
+    line_styles = ['-', '--']
+
+    sns.set_style("whitegrid")
+    fig, axs = plt.subplots(4, 2, figsize=(14, 17))
+    axs_flat = axs.flatten()
+    years = None
+
+    for p_idx, (title, ylabel, variables, unit, zero_line) in enumerate(panels):
+        ax = axs_flat[p_idx]
+        start_ann, end_ann = [], []
+
+        for scenario, runs in reports.items():
+            color = MAIN_FIGURE_COLORS.get(scenario, '#7f7f7f')
+            for v_idx, (var_label, fn) in enumerate(variables):
+                vals = np.mean(np.array([fn(rr["results_macro"]) for rr in runs]), axis=0)
+                if years is None:
+                    years = list(range(2021, 2021 + len(vals)))
+                ax.plot(years, vals, color=color, linestyle=line_styles[v_idx], linewidth=2.2,
+                        label=MAIN_FIGURE_LABELS.get(scenario, scenario) if v_idx == 0 else None)
+                ax.scatter([years[-1]], [vals[-1]], color=color, s=22, zorder=5)
+                fmt = f"{vals[-1]:.1f}T" if unit == 'T' else f"{vals[-1]:.1f}%"
+                end_ann.append({'y': vals[-1], 'real_y': vals[-1], 'label': fmt, 'color': color})
+                if len(variables) == 1 and scenario == 'Baseline':
+                    fmt0 = f"{vals[0]:.1f}T" if unit == 'T' else f"{vals[0]:.1f}%"
+                    start_ann.append({'y': vals[0], 'real_y': vals[0], 'label': fmt0, 'color': color})
+
+        if zero_line:
+            ax.axhline(y=0, color='black', linewidth=0.8, linestyle=':')
+
+        ticks = [2021] + list(range(2025, years[-1] + 1, 5))
+        ax.set_xticks(ticks)
+        ax.set_xticklabels(ticks, rotation=0, fontsize=13)
+        ax.tick_params(axis='y', labelsize=14)
+        ax.set_title(title, fontsize=16, fontweight='bold')
+        ax.set_ylabel(ylabel, fontsize=15, fontweight='bold')
+        if p_idx >= 6:
+            ax.set_xlabel("Year", fontsize=15, fontweight='bold')
+        ax.grid(True, alpha=0.3)
+
+        _place_main_labels(ax, start_ann, years[0], 'right')
+        _place_main_labels(ax, end_ann, years[-1], 'left')
+        ax.set_xlim(years[0] - (7.0 if start_ann else 1.0), years[-1] + 6.5)
+
+        # Legends: scenarios in (a); line-style key in every two-variable panel
+        if p_idx == 0:
+            ax.legend(loc='upper left', fontsize=14, frameon=True)
+        if len(variables) == 2:
+            handles = [Line2D([0], [0], color='0.3', linestyle=line_styles[i], linewidth=2.2)
+                       for i in range(2)]
+            ax.legend(handles, [v[0] for v in variables], loc={2: 'upper center', 5: 'upper left'}.get(p_idx, 'lower left'),
+                      fontsize=13, frameon=True, handlelength=2.6)
+
+        ax.text(-0.06, 1.06, f"({chr(ord('a') + p_idx)})", transform=ax.transAxes,
+                fontsize=16, fontweight='bold', va='top')
+
+    plt.tight_layout()
+    plt.show()
