@@ -1,4 +1,17 @@
-"""Emissions embodied in oil exports: paper Section 4.6, Table 4 (accounting extension outside the model).
+# =============================================================================
+# Lead model conceptualization and development (theory, methodology, and
+# implementation), software architecture & model coding (all components),
+# data acquisition & processing, team supervision: Michael Miess
+# Initial software architecture development, first coding, technical consulting:
+# Joel Foramitti
+# Lead of energy modeling: Ansir Ilyas
+# Lead of water modeling: Dan Wang
+# Model consulting & support: Asjad Naqvi
+# Project conceptualization, funding & supervision: Yoshihide Wada
+# =============================================================================
+
+"""Emissions embodied in oil exports, a short variant of export_emissions_accounting.py (accounting
+extension outside the model). The numbers in the paper come from export_emissions_accounting.py.
 
 Crude oil exports (sector 'Extraction of crude petroleum and natural gas') are deflated with the crude
 sector's price, converted to barrels by anchoring 2021 to Saudi crude exports, and multiplied by a
@@ -11,7 +24,7 @@ Usage (run_model_COMPARE_scenarios.ipynb):
 """
 import pandas as pd
 
-# --- Assumptions (paper Section 4.6), with sources ---------------------------------------------------
+# --- Assumptions, with sources ---------------------------------------------------
 # Saudi crude oil exports in 2021: 6.22 million barrels per day (Joint Organisations Data Initiative, JODI,
 # annual average 2021, reported by Arab News, 20 Feb 2022, "Saudi crude oil exports fell in 2021 even as
 # OPEC+ ease output caps"; OPEC Annual Statistical Bulletin 2022, Table 5.5, gives about 6.2 mb/d).
@@ -44,7 +57,7 @@ def _mean_runs(runs, f):
 
 
 def check_assumptions(exp_reports):
-    """Print a check of the assumptions of Section 4.6 against the model and the literature."""
+    """Print a check of the assumptions against the model and the literature."""
     report = next(iter(exp_reports.values()))[0]
     ef_model = report['parameters_calibrated'].oil_emission_factor * 1e6 * 1000  # tCO2/TJ (NCV)
     gj_hhv_per_bbl = EPA_MMBTU_PER_BBL * GJ_PER_MMBTU
@@ -54,7 +67,7 @@ def check_assumptions(exp_reports):
     barrels_2021 = CRUDE_EXPORTS_2021_BPD * 365
     usd_per_bbl = ex.loc[1] / p.loc[1] * 1000 / SAR_PER_USD / barrels_2021
     ok = lambda c: 'OK' if c else 'CHECK'
-    print('ASSUMPTION CHECK (paper Section 4.6)')
+    print('ASSUMPTION CHECK')
     print(f'  Crude exports 2021: {CRUDE_EXPORTS_2021_BPD / 1e6:.2f} million bbl/day (JODI) = {barrels_2021 / 1e9:.2f} billion bbl')
     print(f'  Emission factor: {EF_T_PER_BBL:.3f} tCO2/bbl (EPA) = {ef_epa_ncv:.1f} tCO2/TJ on a net-calorific basis; '
           f'IPCC 2006: 73.3 ({lo}-{hi}); model: {ef_model:.1f}  [{ok(lo <= ef_epa_ncv <= hi)}]')
@@ -64,7 +77,7 @@ def check_assumptions(exp_reports):
 
 
 def embodied_emissions_table(exp_reports, check=True):
-    """Table 4: cumulative emissions 2021-2060 (GtCO2), territorial (model output) and embodied in
+    """Cumulative emissions 2021-2060 (GtCO2), territorial (model output) and embodied in
     exported crude (range: lower to upper bound, see module docstring)."""
     if check:
         check_assumptions(exp_reports)

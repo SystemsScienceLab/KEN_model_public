@@ -53,7 +53,7 @@ def endogenize_input_output_matrix_A(v: ModelVariables, p: ModelParameters, pc: 
     ###################################################################################################################################################################################################################################################################################################
     # Modify investments in the vision 2030 directly affected sector and in the supplying sectors accordingly, to reflect increased production capacity#
     # Simplified assumption now: investment growth is in line with the increased production growth rates of the vision 2030 direct and int. input supply sectors
-    # Note: Vision 2030 sector growth is applied within the specified policy horizon (vision_2030_timing).
+    # Vision 2030 sector growth is applied within the specified policy horizon (vision_2030_timing).
     # For extended scenarios, the extended_vision_2030_timing parameter governs the additional period.
     if p.Vision_2030_activity_increase and (1 <= t <= max(p.vision_2030_timing, p.extended_vision_2030_timing)):
         # Domestic production increase targeted by Vision 2030 in the directly affected sectors.

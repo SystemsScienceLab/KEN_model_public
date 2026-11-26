@@ -1,3 +1,15 @@
+# =============================================================================
+# Lead model conceptualization and development (theory, methodology, and
+# implementation), software architecture & model coding (all components),
+# data acquisition & processing, team supervision: Michael Miess
+# Initial software architecture development, first coding, technical consulting:
+# Joel Foramitti
+# Lead of energy modeling: Ansir Ilyas
+# Lead of water modeling: Dan Wang
+# Model consulting & support: Asjad Naqvi
+# Project conceptualization, funding & supervision: Yoshihide Wada
+# =============================================================================
+
 """
 Imports without industrial policy: sensitivity run outside the published scenarios.
 

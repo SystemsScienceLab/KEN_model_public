@@ -24,7 +24,7 @@ from .calibration import ParametersCalibrated
 from .utils import string_to_value
 
 
-# Note: endyear must match the value set in the run configuration.
+# endyear must match the value set in the run configuration.
 startyear = 1
 endyear = 41
 
@@ -84,11 +84,11 @@ def create_macro_graphs(results: 'ModelResults', displayPlots: bool = True):
     ###########################################################################
     # TIMESERIES PLOT: plot the main time series that we feed into the model
     ###########################################################################
-    # TIMESERIES PLOT — FIGURE 1 (original with annotations + % of GDP)
+    # TIMESERIES PLOT: FIGURE 1 (with annotations + % of GDP)
     fig1, ax1 = plt.subplots(1, 1, figsize=(13, 7))
     ax1.set_title("Key Time Series for KSA Economy Fed into Model", fontsize=13)
 
-    scale = 1_000_000_000  # Thousand SAR → Trillion SAR
+    scale = 1_000_000_000  # Thousand SAR to Trillion SAR
 
     # --- Pull raw series ---
     s_gdp     = pc.ts_national['Gross Domestic Product (4)']        / scale
@@ -99,7 +99,7 @@ def create_macro_graphs(results: 'ModelResults', displayPlots: bool = True):
     s_nonoil  = pc.ts_national['Non-Oil Sector (4)']                / scale
     s_imp     = pc.ts_national['Imports of Goods & Services (4)']   / scale
 
-    # --- KEY FIX: align all series to a common index ---
+    # --- Align all series to a common index ---
     all_series_raw = [s_gdp, s_inv, s_gov, s_exp, s_oil, s_nonoil, s_imp]
     common_index   = s_gdp.index
 
@@ -184,7 +184,7 @@ def create_macro_graphs(results: 'ModelResults', displayPlots: bool = True):
     fig, axs = plt.subplots(2, 3, figsize=(12, 8))
     ((ax1, ax2, ax3), (ax4, ax5, ax6)) = axs
     
-    # Define the exact ticks requested
+    # x-axis ticks
     specific_ticks = [2021, 2030, 2040, 2050, 2060]
     
     for ax in [ax1, ax2, ax3, ax4, ax5, ax6]:
@@ -211,7 +211,6 @@ def create_macro_graphs(results: 'ModelResults', displayPlots: bool = True):
 
     df['Expenditure'] = df['Gov_exp']
     df['Revenue'] = df['Gov_rev']
-    # Re-assigning to itself handles the warning, though mathematically redundant
     df['GP'] = df['GP'] 
     df['TH'] = df['TH']
 
@@ -245,7 +244,7 @@ def create_macro_graphs(results: 'ModelResults', displayPlots: bool = True):
     ax1.legend(labels=['GDP','Gov revenue','Gov expenditure','Gov deficit'])
 
 
-    # ── Balance of Payments ──
+    # Balance of Payments
     fig, axs = plt.subplots(2, 2, figsize=(14, 10))
     ((ax_bop1, ax_bop2), (ax_bop3, ax_bop4)) = axs
     for ax in [ax_bop1, ax_bop2, ax_bop3, ax_bop4]:
@@ -258,7 +257,7 @@ def create_macro_graphs(results: 'ModelResults', displayPlots: bool = True):
     ax_bop1.legend(labels=['Trade balance', 'Secondary income (remittances)', 'Primary income', 'Current account'], fontsize=8)
     ax_bop1.axhline(y=0, color='black', linewidth=0.5, linestyle='--')
 
-    # Panel 2: Financial account — FDI and Gov_ext_assets change
+    # Panel 2: Financial account, FDI and Gov_ext_assets change
     df.plot(y=['FDI_net_total', 'Gov_ext_assets_change', 'financial_account'],
             title='Financial Account', xlabel='Year', ylabel='Billion SAR', ax=ax_bop2)
     ax_bop2.legend(labels=['FDI net inflows', 'ΔGov. ext. assets (SAMA + PIF)', 'Financial account'], fontsize=8)
@@ -980,10 +979,9 @@ def create_detailed_sectoral_graphs(results: ModelResults, displayPlots: bool = 
 
     def get_nace_section_letter_by_number(idx):
         # Map sector index (0-based) to a NACE code (1-based)
-        # MM changed these codes by hand to adjust for missing sectors.
-        # See e.g. here for the sectoral classification in KSA: https://www.stats.gov.sa/en/w/%D8%A7%D9%84%D8%AA%D8%B5%D9%86%D9%8A%D9%81-%D8%A7%D9%84%D9%88%D8%B7%D9%86%D9%8A-%D9%84%D9%84%D8%A3%D9%86%D8%B4%D8%B7%D8%A9-%D8%A7%D9%84%D8%A7%D9%82%D8%AA%D8%B5%D8%A7%D8%AF%D9%8A%D8%A9?id=2812935
-        # The correspondence made by MM can be found on GITHUB: 
-        # C:\Users\MIESSMG\SFC_CORE3\input_data\MM_Excels_Working\National Classification for the Economic Activities(SSIC)_Jan_2025_En_MMKENModified
+        # Codes adjusted by hand for missing sectors.
+        # Sectoral classification in KSA: https://www.stats.gov.sa/en/w/%D8%A7%D9%84%D8%AA%D8%B5%D9%86%D9%8A%D9%81-%D8%A7%D9%84%D9%88%D8%B7%D9%86%D9%8A-%D9%84%D9%84%D8%A3%D9%86%D8%B4%D8%B7%D8%A9-%D8%A7%D9%84%D8%A7%D9%82%D8%AA%D8%B5%D8%A7%D8%AF%D9%8A%D8%A9?id=2812935
+        # Correspondence table: National Classification for the Economic Activities (SSIC), Jan 2025, adapted to the KEN sectors
         code_int = idx 
         if 0 <= code_int <= 2: return "A"
         elif 3 <= code_int <= 7: return "B"
@@ -1012,8 +1010,7 @@ def create_detailed_sectoral_graphs(results: ModelResults, displayPlots: bool = 
         idx: nace_section_full_names.get(get_nace_section_letter_by_number(idx), "Other")
         for idx in range(85)
     }
-    # If you have a DataFrame with sector columns 0..84 (e.g. results.sectoral['Y'])
-    # You can aggregate it:
+    # Aggregate a DataFrame with sector columns 0..84 (e.g. results.sectoral['Y']) to NACE sections
     def aggregate_to_nace_sections(df):
         section_labels = pd.Series(sector_number_to_nace_section_full)
         return df.groupby(section_labels, axis=1).sum()
@@ -1036,7 +1033,6 @@ def create_detailed_sectoral_graphs(results: ModelResults, displayPlots: bool = 
     Other_Y_ = Y_ - W_ - P_
     # Create figure and axes
 
-    # For checking the mapping:
 
 
 
@@ -1453,8 +1449,7 @@ def create_detailed_sectoral_graphs(results: ModelResults, displayPlots: bool = 
 # BALANCE SHEET
 ##########################################################################################################################################################################################################
 ##########################################################################################################################################################################################################
-# Changes from original:
-# - Using sum over all sectors instead of first sector only
+# Sums over all sectors
 def create_balance_sheet(results: ModelResults, t: int = -1, display: bool = True):
     """Return two pandas dataframes with symbols and values."""
 
@@ -1618,21 +1613,6 @@ def create_transition_matrix(results: pd.DataFrame, c: ModelConfig, t: int = -1,
         IPdisplay(transition_matrix.round(2))
 
     return transition_matrix, transition_matrix_symbols
-# --- Add this helper function (ideally near the top with other imports) ---
-def _safe_pct_change(policy_val, base_val):
-    """Calculates (policy - base) / base, handling division by zero."""
-    # (policy - base) / base
-    # Use np.where to avoid division by zero
-    change = np.where(
-        base_val != 0,
-        (policy_val - base_val) / base_val,
-        0 # If base is 0, show 0 change
-    )
-    # Handle cases where both are 0 (which is 0 change, not nan)
-    change = np.nan_to_num(change, nan=0.0, posinf=0.0, neginf=0.0)
-    return change * 100 # Return as percentage
-
-# --- This is the updated plotting function ---
 
 
 

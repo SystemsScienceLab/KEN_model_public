@@ -165,16 +165,16 @@ def plot_fdi_attribution(pc, year=2023, figsize_per_chart=(18, 7)):
         plt.show()
 
         # Print numeric summary
-        print(f"\n{'─' * 70}")
+        print(f"\n{'-' * 70}")
         print(f"  {title}")
-        print(f"{'─' * 70}")
+        print(f"{'-' * 70}")
         print(f"  {'Sector':<45} {'Aggregate':>15} {'Disaggregated':>15} {'Diff':>12}")
-        print(f"  {'─' * 87}")
+        print(f"  {'-' * 87}")
         for sector in comp_with_total.index:
             a = comp_with_total.loc[sector, 'Aggregate']
             d = comp_with_total.loc[sector, 'Disaggregated']
             diff_s = d - a
-            marker = '  ✓' if abs(diff_s) < 1 else f'  ✗ {diff_s:+,.0f}'
+            marker = '  ok' if abs(diff_s) < 1 else f'  diff {diff_s:+,.0f}'
             print(f"  {sector:<45} {a:>15,.0f} {d:>15,.0f}{marker}")
         print()
 
@@ -311,16 +311,16 @@ def plot_fdi_decomposition(pc, year=2023, figsize=(22, 10)):
     plt.show()
 
     # --- 6. Print a detailed legend table ---
-    print(f"\n{'═' * 100}")
+    print(f"\n{'=' * 100}")
     print(f"  FDI Net Inflows {year}: Model-Sector Decomposition Legend")
-    print(f"{'═' * 100}")
+    print(f"{'=' * 100}")
     for fdi_sec in fdi_sector_order:
         members = fdi_groups[fdi_sec]
         members_sorted = sorted(members, key=lambda m: abs(m[2]), reverse=True)
         agg_val = agg_row[fdi_sec]
-        print(f"\n  ▸ {fdi_sec}  (Aggregate: {agg_val:,.0f} SAR)")
+        print(f"\n  - {fdi_sec}  (Aggregate: {agg_val:,.0f} SAR)")
         print(f"    {'Idx':<6} {'Model Sector':<65} {'Value (SAR)':>15} {'Share':>8}")
-        print(f"    {'─' * 95}")
+        print(f"    {'-' * 95}")
         for midx, mname, mval in members_sorted:
             share = (mval / agg_val * 100) if agg_val != 0 else 0
             print(f"    [{midx:<3}]  {mname:<65} {mval:>15,.0f} {share:>7.1f}%")

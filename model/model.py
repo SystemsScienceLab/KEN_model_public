@@ -191,17 +191,17 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
     # With past inflation rates as proxy for expectations, this yields cyclical dynamics; the AR-based forecast is used instead:
     if p.Inflation_timeseries_model:
         if t == 1:
-            # PK MOTIVATION (Godley-Lavoie, 2012; Lavoie, 2014 §9):
+            # Post-Keynesian motivation (Godley-Lavoie, 2012; Lavoie, 2014, ch. 9):
             # The 2021-2022 period was dominated by transitory global supply-chain
-            # disruptions and post-pandemic normalisation — shocks that are exogenous
+            # disruptions and post-pandemic normalisation: shocks that are exogenous
             # to this structural long-run model and are not captured in its equations.
             # Saudi firms under bounded rationality, aware of the country's institutionally
             # anchored inflation (fixed exchange rate peg, administered energy prices,
             # price regulation), would NOT embed these transitory spikes into their
             # structural cost-markup pricing decisions.
             # Using inflation_avg also prevents the AR expectations series from being
-            # seeded with a non-structural outlier that would otherwise trigger an
-            # artifactual mean-reverting deflation signal at t=3.
+            # seeded with a non-structural outlier that would otherwise trigger a
+            # spurious mean-reverting deflation signal at t=3.
             # (pc.inflation_2021 and pc.inflation_2022 remain stored for sensitivity analyses.)
             v.Inflation_forecast[t] = pc.inflation_avg
             if verbose:
@@ -210,7 +210,7 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
         elif t == 2:
             # Same reasoning: structural anchor instead of the transitory 2022 rate.
             # The 2022 non-oil deflator spike was driven by global commodity/energy
-            # prices — an exogenous shock absent from this model's equations.
+            # prices: an exogenous shock absent from this model's equations.
             v.Inflation_forecast[t] = pc.inflation_avg
             if verbose:
                 print("v.Inflation_forecast[t] t=2: structural anchor inflation_avg (not transitory 2022 data)",
@@ -225,12 +225,12 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
                 print(
                     "v.Inflation_forecast[t] using time series model", v.Inflation_forecast[t], "time ", t)
 
-    # ─── Normal-cost pricing: EMA-smoothed unit cost share ────────────────────
-    # PK motivation (Kalecki/Godley-Lavoie tradition): firms set prices on NORMAL
-    # unit costs, not on actual period-to-period realised cost shares.  A simple
+    # Normal-cost pricing: EMA-smoothed unit cost share
+    # Post-Keynesian motivation (Kalecki/Godley-Lavoie tradition): firms set prices on NORMAL
+    # unit costs, not on actual period-to-period realised cost shares. A simple
     # exponential moving average prevents volatile profits in early periods from
-    # feeding directly into prices and causing the observed swing-in of the
-    # cumulative deflator.  price_smooth_factor controls how quickly firms revise
+    # feeding directly into prices and causing a swing in the
+    # cumulative deflator. price_smooth_factor controls how quickly firms revise
     # their normal-cost estimate (0 = never revise, 1 = fully use current cost).
     _raw_cost_share = np.where(
         v.X_[t-1] != 0,
@@ -260,10 +260,9 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
     # so the price index is pinned to 1 (currently, no better data available for this correction, this is subject to future work).
     v.p_[t][pc.sector_desal] = 1
     v.p_[t][pc.sector_wwater] = 1
-    # Optional: pin financial-sector price to 1 to prevent the large downward drift
-    # observed in unconstrained runs (due to high profit shares / calibration artefacts).
-    # WARNING: setting this True affects bank profit calculations downstream; re-check
-    # financial-sector consistency if results change unexpectedly.
+    # Optional: pin financial-sector price to 1. Without it, the price drifts down strongly
+    # because of the high calibrated profit share of the sector.
+    # Setting this True also affects bank profit calculations downstream.
     if p.Fix_finance_sector_price:
         v.p_[t][pc.sector_finance] = 1
 
@@ -321,7 +320,7 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
                 (1 + p.wage_population_growth_adjustment)**t
         elif t == 2:
             # Blend t=1 and t=3+ regimes to prevent a structural jump at the wage formula switch.
-            # PK motivation: wages are institutionally set and do not jump discontinuously.
+            # Wages are institutionally set and do not jump discontinuously.
             target_W2 = v.X_[t-1] * pc.wage_share_in_X_ * \
                 (1 + v.gW[t]) * (1 + p.wage_population_growth_adjustment)**t
             v.W_[t] = 0.5 * v.W_[t-1] * (1 + v.gW[t]) * (1 + p.wage_population_growth_adjustment) \
@@ -348,10 +347,10 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
     # The idea behind this switch is that households might want to keep REAL consumption stable, and adjust their consumption to inflation up front.
     # Stable REAL consumption seems like a reasonable assumption, especially in a country like Saudi Arabia with relatively stable inflation rates historically.
 
-    # NOTE: (YD_wage - remittances) is used here because remittances are a leakage that leaves Saudi Arabia
-    # and does not finance domestic consumption. Remittances are already computed earlier in the step.
+    # (YD_wage - remittances) is used here because remittances are a leakage that leaves Saudi Arabia
+    # and does not finance domestic consumption. Remittances are computed earlier in the step.
     # α2 is calibrated consistently in calibration.py to match residual consumption after this leakage.
-    # Standard choice for model documentation and first paper:
+    # Standard choice:
     # adapt_consumption_inflation = True
     adapt_consumption_inflation = True
     if adapt_consumption_inflation:
@@ -399,7 +398,7 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
     ########################################################################################################################################################################################################################
 
     #####################################################################################################################################################################################################################
-    # 5.1 Imports — usually not used, because imports are the residual between desired demand and domestic supply in standard model choice
+    # 5.1 Imports: usually not used, because imports are the residual between desired demand and domestic supply in standard model choice
     #####################################################################################################################################################################################################################
     if p.Import_timeseries_model:
         Import_model_fit = estimate_ar_model_growthrates(
@@ -413,8 +412,8 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
     else:
         v.IM_[t] = np.maximum(0, v.IM_[t-1] * (1 + p.import_growth_adjustment))
         # Do not allow negative imports (these are either meaningless or should be defined as exports)
-    # 3. Apply net-zero effects (add exports and subtract imports)
-    # We place this AFTER the baseline IM calculation so the substitution is subtracted
+    # Apply net-zero effects (add exports and subtract imports)
+    # This comes AFTER the baseline IM calculation, so the substitution is subtracted
     # from the calculated baseline import volume.
     if p.net_emission_reduction_green_investments_exports_transformation:
         calculate_green_exports_and_substitution(v, p, pc, t)
@@ -503,7 +502,7 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
     # otherwise create negative Gov_exp. Sovereign assets are tracked separately via Gov_ext_assets.
     # Two-phase sovereign financing: interest and principal repayment on international sovereign bonds (Bond_external) are added when Phase 2 is active.
     # Interest cost: analogous to domestic bond interest in Gov_exp.
-    # Repayment cost: analogous to domestic bond principal repayment (ρ × Bond[t-1]) — financed by widening the domestic fiscal deficit.
+    # Repayment cost: analogous to domestic bond principal repayment (ρ * Bond[t-1]), financed by widening the domestic fiscal deficit.
     v.Bond_external_interest_cost[t] = pc.interest_gov_bonds * max(v.Bond_external[t - 1], 0.0)
     v.Bond_external_repayment[t]     = p.ρ_ext             * max(v.Bond_external[t - 1], 0.0)
     v.Gov_exp[t] = v.GY[t] + np.sum(v.Sub_production_[t]) + v.GI[t] + np.maximum(v.Bond_domestic[t-1], 0) * np.sum(pc.interest_gov_bonds + p.ρ) + pc.gov_exp_resid + v.Bond_external_interest_cost[t] + v.Bond_external_repayment[t]
@@ -521,16 +520,16 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
     ########################################################################################################################################################################################################################
     # Initalize with average growth rate, and then let the model calculate new expected growth rate
     # by the growth of final demand. We assume that firms can observe the growth rates of final demand components
-    # Lagged (t-2) formulation found numerically unstable; preferred AR formulation below.
+    # A lagged (t-2) formulation is numerically unstable, the AR formulation below is preferred.
     
-    # Alternative aggregate formulation retained for reference; published scenarios use the AR time series model below.
+    # Alternative aggregate formulation. The scenarios use the AR time series model below.
     if t <= 1:
         v.gY_e[t] = pc.gY_avg
     else:
         # Average aggregate demand growth rate all sectors from last period for expectation formation (index uses t-1)
         v.gY_e[t] = (np.sum((pc.dC * v.C[t] + pc.dG * v.GY[t] + v.I_demand_[t] + v.EX_oil_[t] + v.EX_non_oil_[t] - v.IM_[t])) /
                      np.sum((pc.dC * v.C[t-1] + pc.dG * v.GY[t-1] + pc.dI * v.I_total[t-1] + v.EX_oil_[t-1] + v.EX_non_oil_[t-1] - v.IM_[t-1])))-1
-        # Sectoral variant retained for reference; not used in published scenarios.
+        # Sectoral variant, not used in the scenarios.
         v.gY_e_[t] = ((pc.dC * v.C[t] + pc.dG * v.GY[t] + v.I_demand_[t] + v.EX_oil_[t] + v.EX_non_oil_[t] - v.IM_[t]) /
                       (pc.dC * v.C[t-1] + pc.dG * v.GY[t-1] + pc.dI * v.I_total[t-1] + v.EX_oil_[t-1] + v.EX_non_oil_[t-1] - v.IM_[t-1]))-1
 
@@ -886,12 +885,12 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
     v.C[t] = np.sum(v.C_[t])
     v.GY[t] = np.sum(v.GY_[t])
 
-    # Check again whether investment desired and investment demand match in the aggregate
-    # NOTE: I_demand_[t] may have been reduced by the unmet-demand loop above, so this
-    # check captures any gap that survives after rationing. Storage imports (routing to IM
-    # rather than domestic demand) are excluded from the threshold — same logic as CHECK 1.
-    # Carbon credit investments (v.I_carbon_credits_[t]) are also excluded — they are computed
-    # in energy_module and routed to foreign asset purchases, never into domestic I_demand_.
+    # Compare desired investment and investment demand in the aggregate.
+    # I_demand_[t] may have been reduced by the unmet-demand loop above, so the comparison
+    # shows any gap that remains after rationing. Storage imports (routed to IM rather
+    # than domestic demand) are excluded, as in the GDP check above. Carbon credit
+    # investments (v.I_carbon_credits_[t]) are also excluded: they are computed in
+    # energy_module and go to foreign asset purchases, not into domestic I_demand_.
     v.I_total_desired[t] = np.sum(v.I_[t])
     v.I_total_demand[t] = np.sum(v.I_demand_[t])  # For diagnostics and calibration
 
@@ -907,19 +906,19 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
         if v.I_total_desired[t] > 0 else 0.0
     )
 
-    # Use ownership total (sum of v.I_[t]) instead of demand total:
-    # v.I_total[t-1] feeds into investment_module's I_ALL_except_energy_desal_wwater base;
-    # using demand here instead of ownership propagates any demand-ownership gap forward.
+    # Ownership total (sum of v.I_[t]), not the demand total: v.I_total[t-1] is the base of
+    # I_ALL_except_energy_desal_wwater in investment_module, and the demand total would carry
+    # any demand-ownership gap forward.
     v.I_total[t] = np.sum(v.I_[t])
 
 
     ########################################################################################################################################################################################################################
     # 9. Re-calculate output (realized final demand and supply)
     ########################################################################################################################################################################################################################
-    # EX_ was built in exports_module BEFORE green exports were added to EX_non_oil_
-    # (calculate_green_exports_and_substitution above), so refresh the totals here.
-    # The identity below uses EX_oil_ + EX_non_oil_ directly and is unaffected; this keeps the
-    # reported/plotted EX_ and ex_ series consistent with it.
+    # EX_ is built in exports_module BEFORE green exports are added to EX_non_oil_
+    # (calculate_green_exports_and_substitution above), so the totals are recomputed here.
+    # The identity below uses EX_oil_ + EX_non_oil_ directly. This keeps the
+    # reported and plotted EX_ and ex_ series consistent with it.
     v.EX_[t] = v.EX_oil_[t] + v.EX_non_oil_[t]
     v.ex_[t] = v.EX_[t] / v.p_[t]
 
@@ -972,9 +971,6 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
     # 11. Energy module: energy demand, supply, prices, emissions
     ######################################################################################################################################################################################################################
     ######################################################################################################################################################################################################################
-    # Some investment-related equations may be moved to the investment module and lagged if required.
-
-    # CAPTURE RETURN VALUES from energy_module
     (v.I_[t], v.I_demand_[t], v.gas_use_[t], v.oil_use_final_[t], v.gas_use_final_[t], 
      v.electricity_use_[t], v.oil_use_[t], v.energy_reduction_factor_[t],
      v.gas_use_total[t], v.oil_use_total[t], v.electricity_use_total[t], v.renewable_energy_generation[t],
@@ -989,8 +985,8 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
     # 12. Flow-flow and stock-flow accounting
     ######################################################################################################################################################################################################################
     ######################################################################################################################################################################################################################
-    # The GDP identity is re-enforced at endogenize_input_output_matrix_A books industrial policy ONCE, to imports, 
-    # and derives Y_ from the identity before solving X_. The check below verifies that before stock-flow accounting begins.
+    # endogenize_input_output_matrix_A books industrial policy once, to imports, and derives Y_ from
+    # the GDP identity before solving X_. The check below confirms the identity before stock-flow accounting.
     Check_GDP_Identity_1 = True
     if Check_GDP_Identity_1:
             v.Y_C_[t]  = pc.dC * v.C[t]
@@ -1081,10 +1077,9 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
     v.intS_[t] = v.IntS_[t] / v.p_[t]
 
     # Real investment total
-    # Investment total is recomputed here for consistency across all sectoral flows.
-    # Use ownership total consistently; see also the first assignment above.
+    # Investment total from the demand side (sum of I_demand_), consistent with the sectoral flows.
+    # Section 8 uses the ownership total for the investment base of the next period.
     # v.I_total[t] = np.sum(v.I_[t])
-    # TODO: Try alternative formulation with I_demand_[t]
     v.I_total[t] = np.sum(v.I_demand_[t])
     v.i_total[t] = v.I_total[t] / v.deflator_gdp[t]
 
@@ -1149,7 +1144,7 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
     # (as is calculated in consumption function)
     v.VAT[t] = v.C[t] * pc.tau_vat
 
-    # Time-dependent profit tax — phased in linearly over p.tax_phase_in_years periods
+    # Time-dependent profit tax: phased in linearly over p.tax_phase_in_years periods
     eff_profit_rate = _phased_tax_rate(
         t,
         p.profit_tax_rate_1, p.profit_tax_rate_timing_1,
@@ -1158,7 +1153,7 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
     )
     v.Tax_profits[t] = np.sum(pc.s_private_ * v.P_[t]) * eff_profit_rate
 
-    # Time-dependent wage tax — phased in linearly over p.tax_phase_in_years periods
+    # Time-dependent wage tax: phased in linearly over p.tax_phase_in_years periods
     eff_wage_rate = _phased_tax_rate(
         t,
         p.wage_tax_rate_1, p.wage_tax_rate_timing_1,
@@ -1177,9 +1172,9 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
     v.GP[t] += pc.gov_bank_share * v.PB[t]
 
     # Income on government gross external asset stock (SAMA reserves + PIF foreign holdings)
-    # Positive when Gov_ext_assets > 0 → government earns investment income (PIF returns, reserve interest)
-    # Negative when Gov_ext_assets < 0 → government pays interest to RoW on net foreign debt
-    # Uses lagged asset stock (known) → no circularity with BoP computed below
+    # Positive when Gov_ext_assets > 0 -> government earns investment income (PIF returns, reserve interest)
+    # Negative when Gov_ext_assets < 0 -> government pays interest to RoW on net foreign debt
+    # Uses lagged asset stock (known) -> no circularity with BoP computed below
     v.Gov_ext_assets_income[t] = p.r_gov_ext_assets * v.Gov_ext_assets[t - 1]
 
     # Government revenue accounting:
@@ -1194,7 +1189,7 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
         p.Gov_ext_assets_extraction * v.Gov_ext_assets_income[t]   # Only extracted share enters Gov_rev; remainder reinvested into Gov_ext_assets stock
     )
 
-    # Government fiscal surplus → PIF: compute Gov_pif_investment HERE (before Bond)
+    # Government fiscal surplus -> PIF: compute Gov_pif_investment HERE (before Bond)
     # so the Bond equation correctly reflects that the PIF-invested fraction does NOT reduce bonds.
     # SFC budget constraint: fiscal surplus is split between (a) paying down bonds and (b) investing in PIF.
     v.gov_fiscal_balance[t] = v.Gov_rev[t] - v.Gov_exp[t]
@@ -1204,11 +1199,11 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
     # pc.domestic_bond_share = 0.60 (fixed, rounded from SAMA 2021 outstanding: 59.6% domestic).
     # Two cases:
     #   Surplus (Gov_rev > Gov_exp): PIF absorbs gov_surplus_pif_rate share of the surplus;
-    #     only the remaining (1 − gov_surplus_pif_rate) fraction retires bonds.
-    #     gov_surplus_pif_rate=1 → entire surplus → PIF; bonds only fall by natural repayment (ρ·Bond[t-1]).
-    #     gov_surplus_pif_rate=0 → entire surplus retires bonds (standard baseline case).
+    #     only the remaining (1 - gov_surplus_pif_rate) fraction retires bonds.
+    #     gov_surplus_pif_rate=1 -> entire surplus -> PIF; bonds only fall by natural repayment (ρ*Bond[t-1]).
+    #     gov_surplus_pif_rate=0 -> entire surplus retires bonds (standard baseline case).
     #   Deficit (Gov_exp > Gov_rev): Gov_pif_investment=0; full deficit is bond-financed.
-    # _bond_change > 0 → new issuance; _bond_change < 0 → net retirement.
+    # _bond_change > 0 -> new issuance; _bond_change < 0 -> net retirement.
     # Gov_ext_assets_income feeds through Gov_rev: positive asset income reduces the financing need.
     if v.gov_fiscal_balance[t] > 0:
         # Surplus: PIF absorbs the gov_surplus_pif_rate share; remainder retires bonds
@@ -1220,30 +1215,30 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
     v.Bond_external_routine_issuance[t] = (1 - pc.domestic_bond_share) * _bond_change
 
     # Gov_net_wealth is computed stock-based BELOW, after Gov_ext_assets[t] is fully finalized.
-    # Definition: Gov_net_wealth[t] = Gov_ext_assets[t] − Bond[t]  (guarantees GNW ≤ Gov_ext_assets when Bond ≥ 0)
+    # Definition: Gov_net_wealth[t] = Gov_ext_assets[t] - Bond[t]  (guarantees GNW <= Gov_ext_assets when Bond >= 0)
 
     ########################################################################################################################################################################################################################
     # 12.4b Balance of Payments (BPM6 structure)
     ########################################################################################################################################################################################################################
-    # Computed here (after imports are finalized in section 8) rather than earlier.
+    # Computed after imports are finalized in section 8.
     # Structure follows Naqvi (2025) "Balance of Payments" and BPM6:
     #   CAB + Capital Account + Financial Account = 0
     #
     # For Saudi Arabia:
     #   - Large trade surplus (oil exports), large remittance outflows (foreign workers)
     #   - FDI inflows represent foreign capital entering the country
-    #   - Fixed exchange rate (3.75 SAR/USD peg) → SAMA intervenes → reserves adjust
+    #   - Fixed exchange rate (3.75 SAR/USD peg) -> SAMA intervenes -> reserves adjust
     #   - Gov_ext_assets (SAMA reserves + PIF foreign holdings) is the natural clearing/residual variable
 
-    # ── Current Account (CAB) ──
+    # Current Account (CAB)
     # (1) Trade balance: exports minus imports of goods and services
     v.trade_balance[t] = np.sum(v.EX_oil_[t]) + np.sum(v.EX_non_oil_[t]) - np.sum(v.IM_[t])
 
     # (2) Primary income balance: investment income net (FDI returns, NFA income)
     #     Gov_ext_assets_income already computed in section 12.4 (enters both Gov_rev and BoP)
     # FDI income repatriation: return on NET FDI stock repatriated abroad (outflow).
-    # Uses FDI_net_stock_total (cumulative net inflows only) instead of gross stock,
-    # preventing amplification by the gross-to-net ratio from FDI_module.
+    # Uses FDI_net_stock_total (cumulative net inflows only), not the gross stock, so that
+    # the gross-to-net ratio of FDI_module does not amplify it.
     # Capped at p.max_FDI_income_share of private profits to prevent model instability.
     if t > 1 and v.FDI_net_stock_total[t - 1] > 0:
         _fdi_income_raw = p.r_FDI_repatriation * v.FDI_net_stock_total[t - 1]
@@ -1252,7 +1247,7 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
     else:
         FDI_income_payments = 0.0
     v.FDI_income_payments[t] = FDI_income_payments
-    # Bond_external interest is an income outflow to foreign bondholders → enters primary income balance as a debit
+    # Bond_external interest is an income outflow to foreign bondholders -> enters primary income balance as a debit
     v.primary_income_balance[t] = v.Gov_ext_assets_income[t] - FDI_income_payments - v.Bond_external_interest_cost[t]
 
     # (3) Secondary income balance: personal remittances (outflow, already computed by remittances_module)
@@ -1261,22 +1256,22 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
     # (4) Current account = trade + primary income + secondary income
     v.current_account[t] = v.trade_balance[t] + v.primary_income_balance[t] + v.secondary_income_balance[t]
 
-    # ── Capital Account (BPM6 definition) ──
-    # Debt forgiveness, investment grants, non-produced asset transfers — negligible for Saudi
+    # Capital Account (BPM6 definition)
+    # Debt forgiveness, investment grants, non-produced asset transfers: negligible for Saudi
     v.capital_account[t] = 0.0
 
-    # ── Financial Account & Gov_ext_assets (GEA) closure ──
+    # Financial Account & Gov_ext_assets (GEA) closure
     # BPM6 decomposition (Godley-Lavoie SFC convention):
-    #   CA + FA = 0   where FA = FDI_net_inflow − ΔGov_ext_assets
-    #   → ΔGov_ext_assets = CA + FDI_net_inflow  (in gross terms, before extraction)
+    #   CA + FA = 0   where FA = FDI_net_inflow - DeltaGov_ext_assets
+    #   -> DeltaGov_ext_assets = CA + FDI_net_inflow  (in gross terms, before extraction)
     #
     # For Saudi Arabia's fixed-exchange-rate economy (3.75 SAR/USD peg):
-    #   • Trade surplus     → SAMA receives USD or other currencies     → Gov_ext_assets ↑ (captured in CA)
-    #   • Remittances out   → workers send USD or other currencies      → Gov_ext_assets ↓ (captured in CA)
-    #   • FDI income repat. → profits sent abroad                       → Gov_ext_assets ↓ (captured in CA)
-    #   • Asset income extraction (p.Gov_ext_assets_extraction fraction) leaves Gov_ext_assets
-    #     and enters Gov_rev; only the REINVESTED share (1−e) stays in Gov_ext_assets.
-    #   • Gov_pif_investment (FA outflow): government acquires foreign assets (PIF) using fiscal surplus.
+    #   - Trade surplus     -> SAMA receives USD or other currencies     -> Gov_ext_assets  up (captured in CA)
+    #   - Remittances out   -> workers send USD or other currencies      -> Gov_ext_assets  down (captured in CA)
+    #   - FDI income repat. -> profits sent abroad                       -> Gov_ext_assets  down (captured in CA)
+    #   - Asset income extraction (p.Gov_ext_assets_extraction fraction) leaves Gov_ext_assets
+    #     and enters Gov_rev; only the REINVESTED share (1-e) stays in Gov_ext_assets.
+    #   - Gov_pif_investment (FA outflow): government acquires foreign assets (PIF) using fiscal surplus.
     #     BPM6: acquisition of reserve assets = financial account debit (outflow from Saudi Arabia to RoW).
     #     Counterpart credit = CA surplus that generated the fiscal surplus (oil exports already in CA).
     v.financial_account[t] = -(v.current_account[t] + v.capital_account[t])
@@ -1284,17 +1279,17 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
                                    - p.Gov_ext_assets_extraction * v.Gov_ext_assets_income[t]
                                    + v.FDI_net_total[t])
     # Routine external bond issuance: the 40 % external share of the fiscal deficit brings in foreign currency
-    # (foreign investors send USD to SAMA) → Gov_ext_assets increases; Bond_external liability stock increases.
+    # (foreign investors send USD to SAMA) -> Gov_ext_assets increases; Bond_external liability stock increases.
     v.Gov_ext_assets_change[t] += v.Bond_external_routine_issuance[t]
     # Gov_pif_investment: government fiscal surplus invested in PIF (foreign assets)
-    # Added here (before _Gov_ext_assets_tentative) so the two-phase floor logic sees the full Gov_ext_assets change.
+    # Included before _Gov_ext_assets_tentative, so the two-phase floor logic sees the full Gov_ext_assets change.
     v.Gov_ext_assets_change[t] += v.Gov_pif_investment[t]
     # Two-phase sovereign financing floor:
     #   Phase 1 (Gov_ext_assets > 50% of initial stock): deficit absorbed by drawing down SAMA/PIF reserves (normal)
     #   Phase 2 (Gov_ext_assets < 50% of initial stock): gap financed by issuing sovereign bonds to RoW at interest_gov_bonds
     #   Rationale: the government treats half the initial sovereign wealth fund as a strategic reserve floor
     #   and switches to bond issuance (at 4%) rather than depleting it further.
-    #   The floor is inert whenever Gov_ext_assets stays above this threshold (zero impact on normal results).
+    #   The floor is not active while Gov_ext_assets stays above this threshold.
     _Gov_ext_assets_floor = 0.5 * pc.Gov_ext_assets_initial
     _Gov_ext_assets_tentative = v.Gov_ext_assets[t - 1] + v.Gov_ext_assets_change[t]
     # Step 1: amortise existing external bonds at rate ρ_ext; add routine new issuance from the 60/40 split
@@ -1312,7 +1307,7 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
         v.Gov_ext_assets[t] = _Gov_ext_assets_tentative
 
     # BoP identity check: CAB + capital_account + financial_account should = 0
-    # Gov_pif_investment is a FA outflow funded by the CA surplus → already absorbed in FA = −CA → BoP_check = 0 ✓
+    # Gov_pif_investment is a financial account outflow funded by the CA surplus, so it is contained in FA = -CA and BoP_check = 0
     v.BoP_check[t] = v.current_account[t] + v.capital_account[t] + v.financial_account[t]
 
     ########################################################################################################################################################################################################################
@@ -1346,7 +1341,7 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
             (1 - v.invest_profit[t])
 
     # HH deposits = total loan stock (endogenous money: loans create deposits attributed to households).
-    # D_HH = sum(L_): HH hold deposits equal to total loans outstanding — the asset counterpart of firm liabilities.
+    # D_HH = sum(L_): HH hold deposits equal to total loans outstanding, the asset counterpart of firm liabilities.
     # This makes the loan-deposit circuit explicit in the balance sheet and TFM.
     v.D_HH[t] = np.sum(v.L_[t])
 
@@ -1386,31 +1381,31 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
     # The V equation is the SFC stock-flow identity for the current model structure:
     #   - v.C[t] is NET consumption (producer prices, ex-VAT); see consumption function.
     #   - v.VAT[t] = v.C[t] * tau_vat is the separate VAT outflow that flows to government.
-    #     Households pay C + VAT gross; only C reaches firms. VAT must be deducted here so
-    #     TFM HH S/D ≈ ΔV (residual gap ≈ remittances only, which are also deducted).
+    #     Households pay C + VAT gross, only C reaches firms. VAT must be deducted here so
+    #     that the household saving in the TFM equals the change in V (remittances are also deducted).
     #   - The term -sum(I_private_dom*invest_profit) = -retained_earnings (firms self-finance from profits).
     #   - Firm loan service (rl+rho)*L is already netted in P_distributed (and thus in YD_profit).
-    # NOTE on V vs total wealth:
+    # V and total wealth:
     #   v.V[t] = HH LIQUID financial wealth (portfolio claims on banks). NOT total HH net worth.
     #   v.HH_total_wealth[t] = full HH net worth = V + D_HH + E_firm_HH + E_bank_HH + OFA_HH,
     #   consistent with the balance sheet matrix (balance_sheet.py create_balance_sheet).
-    #   V is kept separate because (pc.rm * v.V) drives YD_profit → consumption.
+    #   V is kept separate because (pc.rm * v.V) drives YD_profit -> consumption.
     v.V[t] = v.V[t-1] + v.YD_wage[t] + v.YD_profit[t] - \
         v.C[t] - v.VAT[t] - np.sum(v.I_private_dom_[t] * v.invest_profit[t]) - v.remittances[t]
     if t > 1:
         v.gV[t] = (v.V[t] - v.V[t-1])/v.V[t-1]
-    # HH net worth (balance-sheet consistent) ─────────────────────────────────
+    # HH net worth (balance-sheet consistent)
     # Equity components mirror balance_sheet.py
     # Capital-weighted public ownership share (constant; same as TFM / BSM computation).
     _s_pub_agg = np.sum(pc.s_public_ * pc.K_) / np.sum(pc.K_)
-    # Firm equity HH share: E_firm_HH = (1 − s_pub) × (K − L − FDI_net_stock)
+    # Firm equity HH share: E_firm_HH = (1 - s_pub) * (K - L - FDI_net_stock)
     _K_net_t   = np.sum(v.K_[t])   - np.sum(v.L_[t])   - v.FDI_net_stock_total[t]
     _K_net_tm1 = np.sum(v.K_[t-1]) - np.sum(v.L_[t-1]) - v.FDI_net_stock_total[t-1]
     _E_firm_HH = (1.0 - _s_pub_agg) * _K_net_t
-    # Bank equity HH share: E_bank_HH = (1 − gov_bank_share) × (B_dom − V)
+    # Bank equity HH share: E_bank_HH = (1 - gov_bank_share) * (B_dom - V)
     _E_bank_HH = (1.0 - pc.gov_bank_share) * (v.Bond_domestic[t] - v.V[t])
-    # OFA_HH accumulation: in this model S/D_HH = ΔV exactly (V captures the full HH
-    # budget constraint), so ΔOFA_HH = ΔD_HH − ΔE_firm_HH  (TFM residual identity).
+    # OFA_HH accumulation: in this model S/D_HH = DeltaV exactly (V captures the full HH
+    # budget constraint), so DeltaOFA_HH = DeltaD_HH - DeltaE_firm_HH  (TFM residual identity).
     v.OFA_HH[t] = v.OFA_HH[t-1] + (v.D_HH[t] - v.D_HH[t-1]) - (1.0 - _s_pub_agg) * (_K_net_t - _K_net_tm1)
     v.HH_total_wealth[t] = v.V[t] + v.D_HH[t] + _E_firm_HH + _E_bank_HH + v.OFA_HH[t]
 
@@ -1419,15 +1414,15 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
     ########################################################################################################################################################################################################################
     # Mirrors create_balance_sheet.  Reuses _s_pub_agg, _K_net_t, _K_net_tm1 from section 12.6a.
     # Government column BSM assets/liabilities:
-    #   +Gov_ext_assets  −Bond_dom  −Bond_ext          ← liquid stock (already in old formula)
-    #   +E_firm_gov = s_pub × (K − L − FDI)     ← public-firm equity (Aramco, utilities, desal)
-    #   +E_bank_gov = gov_bank_share × (B_dom − V) ← bank equity gov share
-    #   +OFA_Gov    ← clearing residual (all unmodelled gov financial instruments)
-    # V[t] is now available (computed in section 12.6a).
+    #   +Gov_ext_assets - Bond_dom - Bond_ext           liquid stock
+    #   +E_firm_gov = s_pub * (K - L - FDI)             public-firm equity (Aramco, utilities, desal)
+    #   +E_bank_gov = gov_bank_share * (B_dom - V)      bank equity gov share
+    #   +OFA_Gov                                        clearing residual (all unmodelled gov financial instruments)
+    # Uses V[t] from section 12.6a.
     _E_firm_gov = _s_pub_agg * _K_net_t
     _E_bank_gov = pc.gov_bank_share * (v.Bond_domestic[t] - v.V[t])
-    # ΔOFA_Gov = Gov_surplus − Δ(Gov_ext_assets − Bond_dom − Bond_ext) − ΔE_firm_gov − ΔE_bank_gov
-    # This is the BSM residual that guarantees NLNB_Gov = −S/D_Gov identically.
+    # DeltaOFA_Gov = Gov_surplus - Delta(Gov_ext_assets - Bond_dom - Bond_ext) - DeltaE_firm_gov - DeltaE_bank_gov
+    # This is the BSM residual that guarantees NLNB_Gov = -S/D_Gov identically.
     _gov_liquid_NW_t   = v.Gov_ext_assets[t]   - v.Bond_domestic[t]   - v.Bond_external[t]
     _gov_liquid_NW_tm1 = v.Gov_ext_assets[t-1] - v.Bond_domestic[t-1] - v.Bond_external[t-1]
     _Delta_E_firm_gov  = _s_pub_agg      * (_K_net_t - _K_net_tm1)
@@ -1446,7 +1441,7 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
     v.Gov_net_wealth_FULL_plus_aramco[t] = v.Gov_net_wealth_FULL[t] + pc.aramco_value
 
     ########################################################################################################################################################################################################################
-    # 12.7 GDP accounting — production and income approaches
+    # 12.7 GDP accounting: production and income approaches
     ########################################################################################################################################################################################################################
     v.Y_production_[t] = v.X_[t] - v.IntS_[t]
     v.Y_distribution_[t] = v.W_[t] + v.P_[t] + v.C_[t] * pc.tau_vat
@@ -1463,8 +1458,8 @@ def run_model_step(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrat
     water_accounting(v, p, pc, t, verbose)
 
 
-    # Final GDP identity check of the timestep. Nothing between CHECK 1 and here writes a demand
-    # component, so this must agree with CHECK 1.
+    # GDP identity check at the end of the time step. No demand component changes after the
+    # first check, so both checks agree.
     v.Y_C_[t]  = pc.dC * v.C[t]
     v.Y_G_[t]  = pc.dG * v.GY[t]
     v.Y_I_[t]  = v.I_demand_[t]
@@ -1503,7 +1498,7 @@ def prepare_results(T: int, v: ModelVariables, c: ModelConfig):
     # Sum over all sectors is added to the macro variables
     macro_vars_dict = {}
     sector_vars = {}
-    iomatrix = {}  # New category for IO matrix
+    iomatrix = {}  # IO matrices by time step
     trange = list(range(1, T + 1))
     srange = list(range(c.pc.S))
     macro_vars_dict["t"] = trange

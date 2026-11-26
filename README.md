@@ -33,7 +33,7 @@ See "Transformation dynamics of an energy-rich and water-scarce economy in the M
 ## Model structure
 
 Overview of the calculation order and dependencies of each variable.
-![SFC_CORE Model Structure](KEN_framework.png)
+![KEN Model Structure](KEN_framework.png)
 
 ## VSCode Tips
 

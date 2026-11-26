@@ -85,11 +85,11 @@ class ModelVariables:
     K_: NDArray                                 # Capital stock (nominal)
     I_: NDArray                                 # Investment in capital stock (nominal)
     I_energy_eff_: NDArray                      # Investment in energy efficiency (nominal)
-    I_private_: NDArray                         # Private investment in capital stock (nominal) — TOTAL including FDI-financed portion, used for GDP
-    I_public_: NDArray                          # Public (gov) investment in capital stock (nominal) — TOTAL including FDI-financed portion, used for GDP
-    I_private_dom_: NDArray                     # Private investment financed domestically (= I_private_ minus FDI private share) — used for firm financing
-    I_public_dom_: NDArray                      # Public investment financed domestically (= I_public_ minus FDI public share) — used for gov expenditure
-    Sectoral_investment_distribution_: NDArray  # Sectoral distribution of investment (share of each sector in total investment DONE)
+    I_private_: NDArray                         # Private investment in capital stock (nominal), TOTAL including FDI-financed portion, used for GDP
+    I_public_: NDArray                          # Public (gov) investment in capital stock (nominal), TOTAL including FDI-financed portion, used for GDP
+    I_private_dom_: NDArray                     # Private investment financed domestically (= I_private_ minus FDI private share), used for firm financing
+    I_public_dom_: NDArray                      # Public investment financed domestically (= I_public_ minus FDI public share), used for gov expenditure
+    Sectoral_investment_distribution_: NDArray  # Sectoral distribution of investment (share of each sector in total investment)
     Sectoral_en_eff_investment_distribution_: NDArray  # Sectoral distribution of investments in energy efficiency!
     L_: NDArray                                 # Loans (nominal)
     D_HH: NDArray                               # HH deposits = loan proceeds created by endogenous money, attributed to households (D_HH = sum(L_))
@@ -109,7 +109,7 @@ class ModelVariables:
     P_: NDArray                                 # Firm profits nominal
     pi_real_: NDArray                           # Firm profits real (corrected by sectoral price levels)
     P_tot_: NDArray                             # Total profits including financial profits and public profits
-    unit_cost_smooth_: NDArray                  # EMA-smoothed unit cost share (X-P_tot)/X — normal-cost pricing (Kalecki/Lavoie)
+    unit_cost_smooth_: NDArray                  # EMA-smoothed unit cost share (X-P_tot)/X for normal-cost pricing (Kalecki/Lavoie)
     pi_tot_: NDArray                            # Total profits real (corrected by sectoral price levels)
     EX_: NDArray                                # Exports nominal
     EX_oil_: NDArray                            # Oil Exports nominal
@@ -121,9 +121,9 @@ class ModelVariables:
     im_: NDArray                                # Imports real
     #################################################################################################################################################
     # GDP expenditure identity: Y_ = Y_C_ + Y_G_ + Y_I_ + Y_EX_ - Y_IM_
-    # Published as their own series so a components check can never be assembled from
-    # mismatched aggregates (Gov_exp is a FISCAL total that also contains public investment,
-    # bond interest, repayments and transfers; I_total is investment OWNERSHIP).
+    # Stored as separate series, because the aggregates do not add up to GDP: Gov_exp is a
+    # FISCAL total that also contains public investment, bond interest, repayments and transfers,
+    # and I_total is investment OWNERSHIP.
     #################################################################################################################################################
     Y_C_: NDArray                               # GDP component: household consumption entering the identity (= pc.dC * C)
     Y_G_: NDArray                               # GDP component: government consumption entering the identity (= pc.dG * GY). NOT Gov_exp.
@@ -193,7 +193,7 @@ class ModelVariables:
     c: NDArray                                  # Consumption real
     V: NDArray                                  # Household financial wealth (portfolio claims on banks)
     HH_total_wealth: NDArray                    # Household net worth = V + D_HH + E_firm_HH + E_bank_HH + OFA_HH (balance-sheet consistent)
-    OFA_HH: NDArray                             # HH Other Financial Assets stock (cumulative TFM residual; ΔOFA_HH = ΔD_HH − ΔE_firm_HH)
+    OFA_HH: NDArray                             # HH Other Financial Assets stock (cumulative TFM residual; DeltaOFA_HH = DeltaD_HH - DeltaE_firm_HH)
     
     # Wages (total sum household income), i.e. compensation of employees
     W: NDArray                                  # Nominal wages total
@@ -214,11 +214,11 @@ class ModelVariables:
     PIF: NDArray                                # Public Investment Fund (PIF) asset stock (Saudi accumulated stock of government wealth from past oil income)
     GP: NDArray                                 # Government profits
     Bond_domestic: NDArray                      # Government bonds held domestically (60% of new issuance; initial stock from SAMA 2021 data)
-    Gov_net_wealth: NDArray                     # Government liquid net worth (BSM-consistent) = Gov_ext_assets − Bond_dom − Bond_ext
-    Gov_net_wealth_FULL: NDArray                # Government net worth (BSM-consistent) = Gov_ext_assets − Bond_dom − Bond_ext + E_firm_gov + E_bank_gov + OFA_Gov
+    Gov_net_wealth: NDArray                     # Government liquid net worth (BSM-consistent) = Gov_ext_assets - Bond_dom - Bond_ext
+    Gov_net_wealth_FULL: NDArray                # Government net worth (BSM-consistent) = Gov_ext_assets - Bond_dom - Bond_ext + E_firm_gov + E_bank_gov + OFA_Gov
     Gov_net_wealth_FULL_plus_aramco: NDArray         # Government net worth plus Aramco equity valuation
-    OFA_Gov: NDArray                            # Gov Other Financial Assets stock (cumulative TFM residual; ΔOFA_Gov = Gov_surplus − ΔGov_liquid_NW − ΔE_firm_gov − ΔE_bank_gov)
-    gov_fiscal_balance: NDArray                 # Government fiscal balance = Gov_rev − Gov_exp (positive = surplus, negative = deficit)
+    OFA_Gov: NDArray                            # Gov Other Financial Assets stock (cumulative TFM residual; DeltaOFA_Gov = Gov_surplus - DeltaGov_liquid_NW - DeltaE_firm_gov - DeltaE_bank_gov)
+    gov_fiscal_balance: NDArray                 # Government fiscal balance = Gov_rev - Gov_exp (positive = surplus, negative = deficit)
     Tax_profits: NDArray                        # Tax on profits
     Tax_wages: NDArray                          # Tax on wages
     Gov_confidence_boost: NDArray               # Government confidence boost in times of economic crisis ("state-led economy")
@@ -409,7 +409,7 @@ class ModelVariables:
     flow_remove_ccs: NDArray                    # Captured via CCS
     flow_remove_nature: NDArray                 # Sequestered via Nature
 
-    # Additions of November 2026 (see docs and energy_module.py)
+    # Process emissions, process hydrogen and final energy (see energy_module.py)
     process_emissions_: NDArray                 # Process and other non-combustion emissions by sector (MtCO2e)
     process_emissions_total: NDArray            # Their national total (MtCO2e); part of emissions_gross_total
     process_emissions_abated_: NDArray          # Process emissions abated by sector (MtCO2e)
@@ -484,8 +484,7 @@ class ModelVariables:
     I_efficiency_total: NDArray   # Energy Efficiency CapEx
     I_electrification_total: NDArray # Electrification CapEx
     
-    # Sectoral Arrays (Vector size S)
-    # Note: These are arrays of vectors (T x S), ensure initialization handles (T, S)
+    # Sectoral Arrays (T x S)
     gas_use_: NDArray
     oil_use_: NDArray
     electricity_use_: NDArray
@@ -510,7 +509,7 @@ class ModelVariables:
     I_wind: NDArray
     I_bio: NDArray
 
-    # --- Additional model variables ---
+    # --- Other energy and trade variables ---
     I_netzero_ccu_: NDArray
     green_export_total: NDArray
     EX_non_oil_total: NDArray
@@ -525,8 +524,8 @@ class ModelVariables:
     #################################################################################################################################################
     # Foreign Direct Investment (FDI) variables
     #################################################################################################################################################
-    # Sectoral FDI variables (T × S arrays, suffix "_")
-    FDI_net_flow_: NDArray              # Sectoral net FDI inflows (Thousand SAR) — the portion of I_ financed by foreign capital
+    # Sectoral FDI variables (T * S arrays, suffix "_")
+    FDI_net_flow_: NDArray              # Sectoral net FDI inflows (Thousand SAR): the portion of I_ financed by foreign capital
     FDI_gross_flow_: NDArray            # Sectoral gross FDI inflows (Thousand SAR)
     FDI_stock_: NDArray                 # Sectoral cumulative FDI stock (Thousand SAR)
     I_domestic_: NDArray                # Sectoral domestically-financed investment = I_ - FDI_net_flow_ (Thousand SAR)
@@ -536,7 +535,7 @@ class ModelVariables:
     FDI_gross_total: NDArray            # Total gross FDI inflows = sum(FDI_gross_flow_) (Thousand SAR)
     FDI_stock_total: NDArray            # Total gross FDI stock = sum(FDI_stock_) (Thousand SAR)
     FDI_net_stock_: NDArray             # Sectoral cumulative net FDI stock (net inflows only, no gross amplification)
-    FDI_net_stock_total: NDArray        # Total net FDI stock = sum(FDI_net_stock_) (Thousand SAR) — used for income repatriation
+    FDI_net_stock_total: NDArray        # Total net FDI stock = sum(FDI_net_stock_) (Thousand SAR), used for income repatriation
     FDI_share_of_investment: NDArray    # Share of total investment financed by FDI = FDI_net_total / I_total
 
     # Remittances (T arrays, no suffix)
@@ -549,33 +548,33 @@ class ModelVariables:
     # Current account components
     trade_balance: NDArray              # Trade balance = sum(EX_oil_ + EX_non_oil_) - sum(IM_) (1000 SAR)
     FDI_income_payments: NDArray        # FDI profit income repatriated abroad (outflow); capped net-stock based (1000 SAR)
-    primary_income_balance: NDArray     # Primary income balance = reserve_income - FDI_income_payments (1000 SAR) — Phase 2
+    primary_income_balance: NDArray     # Primary income balance = reserve_income - FDI_income_payments (1000 SAR)
     secondary_income_balance: NDArray   # Secondary income balance = -remittances (1000 SAR)
     current_account: NDArray            # Current account = trade_balance + primary_income + secondary_income (1000 SAR)
-    # Capital account (BPM6 definition: debt forgiveness, investment grants — negligible for Saudi)
-    capital_account: NDArray            # Capital account ≈ 0 for Saudi Arabia (1000 SAR)
+    # Capital account (BPM6 definition: debt forgiveness, investment grants, negligible for Saudi Arabia)
+    capital_account: NDArray            # Capital account, approx. 0 for Saudi Arabia (1000 SAR)
     # Financial account components
-    financial_account: NDArray          # Financial account = -current_account (since capital_account ≈ 0) (1000 SAR)
+    financial_account: NDArray          # Financial account = -current_account (since capital_account is approx. 0) (1000 SAR)
     # Government Gross External Asset Stock (clearing variable for BoP)
     # Represents SAMA reserves + PIF foreign holdings (gross; liabilities tracked separately in Bond_domestic, Bond_external)
     # All forex flows (trade surplus, FDI inflows, remittance outflows) accumulate here
     Gov_ext_assets: NDArray             # Government gross external asset stock (1000 SAR): SAMA reserves + PIF foreign holdings
     Gov_ext_assets_change: NDArray      # Period change in Gov_ext_assets (1000 SAR)
-    Gov_ext_assets_income: NDArray      # Income (+) or cost (−) on Gov_ext_assets stock = r_gov_ext_assets × Gov_ext_assets[t−1] (1000 SAR)
-    PIF_income: NDArray                 # PIF return income: r_reserve_income × Gov_net_wealth_plus_aramco[t−1] when > 0, else 0 (1000 SAR)
+    Gov_ext_assets_income: NDArray      # Income (+) or cost (-) on Gov_ext_assets stock = r_gov_ext_assets * Gov_ext_assets[t-1] (1000 SAR)
+    PIF_income: NDArray                 # PIF return income: r_reserve_income * Gov_net_wealth_plus_aramco[t-1] when > 0, else 0 (1000 SAR)
     # BoP identity check (should equal zero)
-    BoP_check: NDArray                  # CAB + capital_account - financial_account, should ≈ 0
+    BoP_check: NDArray                  # CAB + capital_account - financial_account, zero if the BoP closes
     Gov_pif_investment: NDArray         # Government fiscal surplus channelled into PIF (NFA_gov): gov_surplus_pif_rate * max(Gov_rev - Gov_exp, 0) (1000 SAR)
-    # Two-phase sovereign financing (activated only when Gov_ext_assets would cross zero)
-    # Phase 1 (normal): external deficit financed by drawing down SAMA reserves / PIF (Gov_ext_assets ≥ 0)
-    # Phase 2 (cutoff): once reserves exhausted, government issues sovereign bonds to RoW at interest_gov_bonds (4%)
-    # Empirical basis: Saudi Arabia began issuing international sovereign bonds in 2016 precisely as a low-oil-price hedge.
+    # Two-phase sovereign financing (model.py section 12.4b)
+    # Phase 1 (normal): external deficit financed by drawing down SAMA reserves / PIF, while Gov_ext_assets stay above the reserve floor
+    # Phase 2: at the floor (50% of the initial stock), the government issues sovereign bonds to RoW at interest_gov_bonds (4%)
+    # Empirical basis: Saudi Arabia began issuing international sovereign bonds in 2016 as a low-oil-price hedge.
     # In Godley-Lavoie SFC terms this is a switch from 'reduction of foreign assets' to 'incurrence of foreign liabilities'.
-    # Bond_external is inert (=0) whenever Gov_ext_assets stays positive — no impact on baseline results.
-    Bond_external: NDArray              # Stock of sovereign bonds issued to rest-of-world (1000 SAR); zero until NFA_gov floor is hit
-    Bond_external_interest_cost: NDArray  # Period interest payments on Bond_external = interest_gov_bonds × Bond_external[t-1] (1000 SAR)
-    Bond_external_repayment: NDArray    # Period principal repayment on Bond_external = ρ_ext × Bond_external[t-1] (1000 SAR); enters Gov_exp as a cash outflow
-    Bond_external_routine_issuance: NDArray  # Routine external bond issuance = (1 − domestic_bond_share) × raw fiscal deficit (1000 SAR); follows the fixed 60/40 domestic/external split
+    # Apart from routine issuance, Bond_external stays at zero while Gov_ext_assets are above the floor.
+    Bond_external: NDArray              # Stock of sovereign bonds issued to rest-of-world (1000 SAR): routine issuance plus issuance at the reserve floor
+    Bond_external_interest_cost: NDArray  # Period interest payments on Bond_external = interest_gov_bonds * Bond_external[t-1] (1000 SAR)
+    Bond_external_repayment: NDArray    # Period principal repayment on Bond_external = ρ_ext * Bond_external[t-1] (1000 SAR), enters Gov_exp as a cash outflow
+    Bond_external_routine_issuance: NDArray  # Routine external bond issuance = (1 - domestic_bond_share) * raw fiscal deficit (1000 SAR), fixed 60/40 domestic/external split
 
     def __init__(self, T: int, pc: ParametersCalibrated):
 

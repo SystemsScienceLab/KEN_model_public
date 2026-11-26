@@ -1,4 +1,3 @@
-# =============================================================================
 # Lead model conceptualization and development (theory, methodology, and
 # implementation), software architecture & model coding (all components),
 # data acquisition & processing, team supervision: Michael Miess
@@ -8,7 +7,6 @@
 # Lead of water modeling: Dan Wang
 # Model consulting & support: Asjad Naqvi
 # Project conceptualization, funding & supervision: Yoshihide Wada
-# =============================================================================
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -21,7 +19,7 @@ from .model_classes import ModelConfig, ModelResults, ModelParameters
 from .calibration import ParametersCalibrated
 from .utils import string_to_value
 
-# Note: endyear must match the value set in the run configuration.
+# endyear must match the value set in the run configuration.
 startyear = 1
 endyear = 41
 
@@ -33,18 +31,18 @@ def plot_primary_energy_mix(results: 'ModelResults'):
     """
     Plots the total primary energy mix of the economy (Gas, Oil, Renewables) in Exajoules.
     """
-    # --- 1. Setup ---
+    # Setup
     pc = results.config.pc
     macro = results.macro
     years = list(range(2021, 2021 + len(macro)))
     GJ_TO_EJ = 1e-9
 
-    # --- 2. Get Data ---
+    # Get Data
     gas_primary_ej = macro["gas_use_total"] * GJ_TO_EJ
     oil_primary_ej = macro["oil_use_total"] * GJ_TO_EJ
     re_primary_ej = macro["renewable_energy_generation"] * GJ_TO_EJ
 
-    # --- 3. Create Plot ---
+    # Create Plot
     fig, ax = plt.subplots(figsize=(10, 7))
     stack_labels = ["Gas", "Oil", "Renewables"]
     stack_colors = ['#FF9900', '#333333', '#009E73'] # Orange, Black, Green
@@ -69,14 +67,14 @@ def plot_electricity_generation_mix(results: 'ModelResults'):
     Includes 5-year renewable share annotations (e.g., 0.7%) and
     investment bubbles.
     """
-    # --- 1. Setup ---
+    # Setup
     pc = results.config.pc
     macro = results.macro
     sectoral = results.sectoral
     years = list(range(2021, 2021 + len(macro)))
     GJ_TO_TWH = (1 / 3600) / 1000  # GJ -> GWh -> TWh
 
-    # --- 2. Get Data ---
+    # Get Data
     elec_idx = pc.electricity_sector_idx
     
     # Get the historical/forced generation values for Oil and Gas
@@ -85,18 +83,18 @@ def plot_electricity_generation_mix(results: 'ModelResults'):
     gas_for_elec_gj = sectoral["gas_use_final"][elec_idx] * pc.power_plant_efficiency_gas
     oil_for_elec_gj = sectoral["oil_use_final"][elec_idx] * pc.power_plant_efficiency_oil
     
-    # Get the actual renewable generation (this is the one growing at 10%)
+    # Renewable generation
     re_for_elec_gj = macro["renewable_energy_generation"]
     
     # Get RE investment data and convert from Thousand SAR to Billion SAR
     re_investment_bsar = macro["I_RE"] / 1_000_000
 
-    # --- 3. Create Plot ---
+    # Create Plot
     fig, ax = plt.subplots(figsize=(10, 7))
     stack_labels = ["Gas", "Oil", "Renewables"]
     stack_colors = ['#FF9900', '#333333', '#009E73'] # Orange, Black, Green
     
-    # --- Plot 1: Stackplot for Generation (Primary Y-axis) ---
+    # Plot 1: Stackplot for Generation (Primary Y-axis)
     artists = ax.stackplot(years,
                              gas_for_elec_gj * GJ_TO_TWH,
                              oil_for_elec_gj * GJ_TO_TWH,
@@ -111,16 +109,15 @@ def plot_electricity_generation_mix(results: 'ModelResults'):
     ax.grid(True, linestyle=':', linewidth=0.5, which='both')
     ax.set_xlim(years[0], years[-1])
 
-    # --- Plot 2: Bubbles for Investment (Secondary Y-axis) ---
+    # Plot 2: Bubbles for Investment (Secondary Y-axis)
     ax2 = ax.twinx() # Create a second y-axis
     
-    # The line plot from ax2.plot() has been REMOVED as requested.
     
     ax2.set_ylabel("Annual RE Investment (Billion SAR)", color='red')
     ax2.tick_params(axis='y', labelcolor='red') # Make tick labels red
     ax2.set_ylim(0, re_investment_bsar.max() * 1.15) # Give it some space
 
-    # --- 4. Combine Legends from both axes ---
+    # Combine Legends from both axes
     
     # Create a proxy artist (an invisible scatter plot point)
     # just for the legend, so "RE Investment" is included.
@@ -135,7 +132,7 @@ def plot_electricity_generation_mix(results: 'ModelResults'):
               stack_labels + [bubble_legend_proxy.get_label()],
               loc='upper left')
 
-    # --- 5. Add Annotations and Plot Bubbles ---
+    # Add Annotations and Plot Bubbles
     
     # Add 10% growth rate text
     ax.text(0.97, 0.97,
@@ -153,7 +150,7 @@ def plot_electricity_generation_mix(results: 'ModelResults'):
     for i, year in enumerate(years):
         if year >= 2025 and year % 5 == 0:
             
-            # --- A. Calculate Share for Annotation ---
+            # Calculate Share for Annotation
             gas_gj = gas_for_elec_gj.iloc[i]
             oil_gj = oil_for_elec_gj.iloc[i]
             re_gj = re_for_elec_gj.iloc[i]
@@ -166,20 +163,19 @@ def plot_electricity_generation_mix(results: 'ModelResults'):
                 # Get y position (top of the stack)
                 y_pos_twh = total_gen_gj * GJ_TO_TWH
                 
-                # *** UPDATED FORMATTING HERE ***
                 # Add text to the plot, 2% above the stack
                 ax.text(year, y_pos_twh * 1.02,
-                        f"{re_share_pct:.1f}%", # Changed from .0f to .1f
+                        f"{re_share_pct:.1f}%",
                         ha='center',
                         va='bottom',
                         fontsize=9,
                         fontweight='bold',
                         color='black') # Ensure text is visible
 
-            # --- B. Get Investment Value ---
+            # Get Investment Value
             investment_bsar_val = re_investment_bsar.iloc[i]
             
-            # --- C. Plot Investment Bubble (NEW) ---
+            # Plot Investment Bubble
             # Plot the actual bubble on the secondary axis
             ax2.scatter(year,
                         investment_bsar_val,
@@ -189,7 +185,7 @@ def plot_electricity_generation_mix(results: 'ModelResults'):
                         alpha=0.7,
                         zorder=10) # Make sure it's on top
             
-            # --- D. Print to Console ---
+            # Print to Console
             print(f"Year {year}: Share = {re_share_pct:.1f}%, Annual Investment = {investment_bsar_val:.2f} Billion SAR")
     
     plt.tight_layout()
@@ -204,14 +200,14 @@ def plot_energy_investments(results: 'ModelResults'):
     - I_[elec]: General investment in the electricity sector.
     - Total: The sum of both.
     """
-    # --- 1. Setup ---
+    # Setup
     pc = results.config.pc
     macro = results.macro
     sectoral = results.sectoral
     years = list(range(2021, 2021 + len(macro)))
     THOUSAND_TO_BILLION = 1e-6     # Model investment is in Thousand SAR
 
-    # --- 2. Get Data ---
+    # Get Data
     elec_idx = pc.electricity_sector_idx
     
     # Investment for new RE capacity (Solar, Wind, etc.)
@@ -223,7 +219,7 @@ def plot_energy_investments(results: 'ModelResults'):
     # Calculate the total investment
     total_elec_investment_bil = re_investment_bil + elec_sector_investment_bil
 
-    # --- 3. Create Plot ---
+    # Create Plot
     fig, ax = plt.subplots(figsize=(12, 7))
     
     # Plot the total investment first
@@ -310,14 +306,14 @@ def create_energy_graphs(results: 'ModelResults'):
     pc = results.config.pc
     years = list(range(2021, 2021 + len(results.macro)))
 
-    # --- Conversion factor from GJ to EJ (1 EJ = 10^9 GJ) ---
+    # Conversion factor from GJ to EJ (1 EJ = 10^9 GJ)
     GJ_TO_EJ = 1e9
 
-    # --- Create figure with two subplots ---
+    # Create figure with two subplots
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 7))
     fig.suptitle('Energy Consumption Analysis', fontsize=16)
 
-    # --- Subplot 1: Total Energy Use Over Time (in EJ) ---
+    # Subplot 1: Total Energy Use Over Time (in EJ)
     ax1.set_title("Total Energy Consumption by Type")
     # Convert data from GJ to EJ for plotting
     ax1.plot(years, results.macro["gas_use_total"] / GJ_TO_EJ, label="Total Gas Use (EJ)", color='orange', marker='o', linestyle='-')
@@ -330,7 +326,7 @@ def create_energy_graphs(results: 'ModelResults'):
     ax1.legend()
     ax1.grid(True, which='both', linestyle='--', linewidth=0.5)
 
-    # --- Subplot 2: Sectoral Energy Use in Final Year (in EJ) ---
+    # Subplot 2: Sectoral Energy Use in Final Year (in EJ)
     final_year_index = len(results.macro) - 1
     
     # Convert sectoral data from GJ to EJ first
@@ -372,84 +368,7 @@ def create_energy_graphs(results: 'ModelResults'):
     plt.tight_layout(rect=[0, 0.03, 1, 0.95]) # Adjust layout to make room for suptitle
     plt.show()
 
-# ... (other imports) ...
 
-# In postprocessing.py, add this new function at the end of the file
-
-# In postprocessing.py, add this new function at the end of the file
-
-# In postprocessing.py, replace the entire function with this one.
-
-# In postprocessing.py, replace the entire function with this one.
-
-def create_renewable_energy_graphs(results: ModelResults):
-    """
-    Creates plots to visualize the primary energy mix, renewable adoption, and impact on emissions.
-    """
-    
-    df_macro = results.macro.copy()
-    pc = results.config.pc
-    p = results.config.p
-    years = list(range(2021, 2021 + len(df_macro)))
-    
-    # --- Conversion factor from GJ to Exajoules (EJ) for better readability ---
-    GJ_TO_EJ = 1e-9
-
-    # --- Create Figure ---
-    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(22, 6))
-    
-    # Set main title based on the scenario run
-    scenario_title = "Vision 2030 Scenario" if p.vision_2030_renewable_target else "Trend Scenario"
-    fig.suptitle(f"Energy and Emissions Analysis: {scenario_title}", fontsize=16)
-
-    # --- Plot 1: Total Primary Energy Consumption by Source (Corrected) ---
-    ax1.set_title("Primary Energy Mix by Source")
-    
-    # Convert final primary energy data to EJ for plotting
-    gas_final_ej = df_macro["gas_use_final"] * GJ_TO_EJ
-    oil_final_ej = df_macro["oil_use_final"] * GJ_TO_EJ
-    renewable_ej = df_macro["renewable_energy_generation"] * GJ_TO_EJ
-
-    # Create a stacked plot showing only the primary energy sources
-    ax1.stackplot(years, oil_final_ej, gas_final_ej, renewable_ej,
-                  labels=['Oil (Primary Use)', 'Gas (Primary Use)', 'Renewables'],
-                  colors=['#2d2d2d', '#ff7f0e', '#2ca02c'])
-    
-    ax1.set_xlabel("Year")
-    ax1.set_ylabel("Primary Energy Consumption (EJ)")
-    ax1.legend(loc='upper left')
-    ax1.grid(True, linestyle='--', linewidth=0.5)
-
-    # --- Plot 2: Share of Renewable Energy (Unchanged) ---
-    ax2.set_title("Share of Renewables in Total Energy Demand")
-    ax2.plot(years, df_macro["renewable_energy_share"] * 100,
-             label="Renewable Energy Share (%)", color='green', marker='.')
-    
-    if p.vision_2030_renewable_target:
-        ax2.axhline(y=50, color='r', linestyle='--', label='50% Vision 2030 Target')
-        ax2.axvline(x=2030, color='grey', linestyle=':', label='2030 Target Year')
-
-    ax2.set_xlabel("Year")
-    ax2.set_ylabel("Share (%)")
-    ax2.set_ylim(0, 100)
-    ax2.legend()
-    ax2.grid(True, linestyle='--', linewidth=0.5)
-
-    # --- Plot 3: Total Greenhouse Gas Emissions (Unchanged) ---
-    ax3.set_title("Total GHG Emissions by Source")
-    ax3.stackplot(years, df_macro["oil_emissions_total"], df_macro["gas_emissions_total"], df_macro["electricity_emissions_total"],
-                  labels=['Oil Emissions', 'Gas Emissions', 'Electricity Emissions'],
-                  colors=['#2d2d2d', '#ff7f0e', '#1f77b4'])
-
-    ax3.set_xlabel("Year")
-    ax3.set_ylabel("Emissions (MtCO2)")
-    ax3.legend(loc='upper right')
-    ax3.grid(True, linestyle='--', linewidth=0.5)
-
-    plt.tight_layout(rect=[0, 0, 1, 0.96])
-    plt.show()
-
-    # In postprocessing.py, add this entire new function at the end of the file.
 
 def plot_renewable_energy_assumptions(config: ModelConfig, T: int):
     """
@@ -461,7 +380,7 @@ def plot_renewable_energy_assumptions(config: ModelConfig, T: int):
     years = np.arange(2021, 2021 + T)
     GJ_TO_EJ = 1e-9 # Conversion factor from Gigajoules to Exajoules
 
-    # --- 1. Calculate the Trend Scenario Pathway ---
+    # Calculate the Trend Scenario Pathway
     # Historical generation 2021-2025, then the linear trend used in the model
     # (energy_investment_module.py: + pc.re_trend_annual_addition_gj per year).
     trend_generation = np.zeros(T)
@@ -471,7 +390,7 @@ def plot_renewable_energy_assumptions(config: ModelConfig, T: int):
     for t in range(n_hist, T):
         trend_generation[t] = trend_generation[t-1] + pc.re_trend_annual_addition_gj
 
-    # --- 2. Calculate the Vision 2030 Share Pathway ---
+    # Calculate the Vision 2030 Share Pathway
     # This visualizes the linear target path for the share of renewables until 2030.
     vision_share = np.zeros(T)
     vision_timing_index = p.vision_2030_timing - 1  # e.g., year 2030 is t=10, index=9
@@ -482,16 +401,15 @@ def plot_renewable_energy_assumptions(config: ModelConfig, T: int):
              start_share = pc.initial_RE_share
              end_share = 0.50
              vision_share[t] = start_share + (end_share - start_share) * (t / vision_timing_index)
-        # After 2030, the logic follows the trend growth rate. We'll show this in the text.
-        # For the plot, we'll set the rest to NaN so only the target path is drawn.
+        # After 2030 the trend growth rate applies. The rest is set to NaN so only the target path is drawn.
         vision_share[vision_timing_index + 1:] = np.nan
 
 
-    # --- 3. Create the Plot ---
+    # Create the Plot
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 7))
     fig.suptitle("Model Input Assumptions for Renewable Energy Pathways", fontsize=16)
 
-    # --- Subplot 1: Trend Scenario Generation ---
+    # Subplot 1: Trend Scenario Generation
     ax1.plot(years, trend_generation * GJ_TO_EJ, marker='.', linestyle='--', color='teal')
     ax1.set_title("Scenario 1: 'Trend' Assumption")
     ax1.set_xlabel("Year")
@@ -501,7 +419,7 @@ def plot_renewable_energy_assumptions(config: ModelConfig, T: int):
              bbox=dict(boxstyle='round,pad=0.5', fc='aliceblue', alpha=0.8))
     ax1.grid(True, linestyle=':', linewidth=0.5)
 
-    # --- Subplot 2: Vision 2030 Share Target ---
+    # Subplot 2: Vision 2030 Share Target
     ax2.plot(years, vision_share * 100, marker='.', linestyle='-', color='green', linewidth=2)
     ax2.set_title("Scenario 2: 'Vision 2030' Assumption")
     ax2.set_xlabel("Year")
@@ -529,7 +447,7 @@ def create_sectoral_energy_transformation_plot(results: ModelResults, target_yea
         print("This plot is designed for the Vision 2030 scenario. Please run the model with `vision_2030_renewable_target = True`.")
         return
 
-    # --- Data Preparation ---
+    # Data Preparation
     # Find the index for the target year (e.g., year 2040 is t=20)
     time_index = target_year - 2021 + 1
     if time_index >= len(results.macro):
@@ -555,7 +473,7 @@ def create_sectoral_energy_transformation_plot(results: ModelResults, target_yea
     oil_final_top10 = oil_final[top_10_sectors_indices]
     gas_final_top10 = gas_final[top_10_sectors_indices]
     
-    # --- Plotting ---
+    # Plotting
     fig, ax = plt.subplots(figsize=(18, 8))
     sector_labels = [textwrap.fill(pc.sectors[i], 15) for i in top_10_sectors_indices]
     indices = np.arange(len(top_10_sectors_indices))
@@ -577,7 +495,7 @@ def create_sectoral_energy_transformation_plot(results: ModelResults, target_yea
     plt.tight_layout()
     plt.show()
 
-    # --- Print Share Analysis ---
+    # Print Share Analysis
     print(f"\n--- Renewable Energy Share Analysis for Top Sectors in {target_year} (Vision 2030) ---")
     for i, sector_idx in enumerate(top_10_sectors_indices):
         total_energy_sector = oil_final_top10.iloc[i] + gas_final_top10.iloc[i] + re_consumed_by_sector.iloc[i]
@@ -592,11 +510,11 @@ def create_emission_graphs(results: ModelResults):
     pc = results.config.pc
     years = list(range(2021, 2021 + len(results.macro)))
 
-    # --- Create figure with two subplots ---
+    # Create figure with two subplots
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 7))
     fig.suptitle('Emission Analysis', fontsize=16)
 
-    # --- Subplot 1: Total Emissions Over Time ---
+    # Subplot 1: Total Emissions Over Time
     ax1.set_title("Total Emissions by Source")
     ax1.plot(years, results.macro["gas_emissions_total"], label="Total Gas Emissions (MtCO2)", color='orange', marker='o', linestyle='-')
     ax1.plot(years, results.macro["electricity_emissions_total"], label="Total Electricity Emissions (MtCO2)", color='blue', marker='s', linestyle='-')
@@ -607,7 +525,7 @@ def create_emission_graphs(results: ModelResults):
     ax1.legend()
     ax1.grid(True, which='both', linestyle='--', linewidth=0.5)
 
-    # --- Subplot 2: Sectoral Emissions in Final Year ---
+    # Subplot 2: Sectoral Emissions in Final Year
     # Combine all emissions for ranking sectors
     final_year_index = len(results.macro) - 1
     total_emissions_by_sector = (
@@ -641,8 +559,6 @@ def create_emission_graphs(results: ModelResults):
 
     plt.tight_layout(rect=[0, 0.03, 1, 0.95]) # Adjust layout to make room for suptitle
     plt.show()
-# --- START OF NEW CODE BLOCK ---
-# In postprocessing.py, replace the entire function with this corrected one.
 
 def create_transition_analysis_plots(results: ModelResults):
     """
@@ -658,7 +574,7 @@ def create_transition_analysis_plots(results: ModelResults):
     scenario_title = "Vision 2030" if p.vision_2030_renewable_target else "Trend"
     fig.suptitle(f"Investment and Cost of Energy Transition ({scenario_title} Scenario)", fontsize=16)
 
-    # --- Plot 1: Annual Investment in Energy ---
+    # Plot 1: Annual Investment in Energy
     ax1.set_title("Annual Investment in Energy Capacity")
     # Investment in renewables
     ax1.plot(years, df_macro["I_RE"], label="Renewable Energy Investment", color='green', linewidth=2)
@@ -671,7 +587,7 @@ def create_transition_analysis_plots(results: ModelResults):
     ax1.legend()
     ax1.grid(True, linestyle=':', linewidth=0.5)
 
-    # --- Plot 2: Net Cost of Transition for Top Sectors ---
+    # Plot 2: Net Cost of Transition for Top Sectors
     target_year = 2035
     time_index = target_year - 2021 + 1
     
@@ -697,9 +613,7 @@ def create_transition_analysis_plots(results: ModelResults):
 
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.show()
-# In postprocessing.py, add this entire new function at the end of the file.
 
-# In postprocessing.py, replace the entire function with this corrected one.
 
 def create_net_zero_analysis_plots(results: ModelResults):
     """
@@ -720,7 +634,7 @@ def create_net_zero_analysis_plots(results: ModelResults):
     fig, axs = plt.subplots(2, 2, figsize=(20, 14))
     fig.suptitle("Analysis of the Saudi Net Zero 2060 Scenario", fontsize=20)
 
-    # --- Plot 1: Emission Reduction Pathway ---
+    # Plot 1: Emission Reduction Pathway
     ax1 = axs[0, 0]
     ax1.set_title("GHG Emission Reduction Pathway")
     ax1.stackplot(years, df_macro["oil_emissions_total"], df_macro["gas_emissions_total"], df_macro["electricity_emissions_total"],
@@ -735,7 +649,7 @@ def create_net_zero_analysis_plots(results: ModelResults):
     ax1.legend(loc='upper right')
     ax1.grid(True, linestyle=':', linewidth=0.5)
 
-    # --- Plot 2: Required Investment ---
+    # Plot 2: Required Investment
     ax2 = axs[0, 1]
     ax2.set_title("Annual Investment Profile")
     ax2.bar(years, df_macro["I_RE"], color='green', label='Renewable Energy Investment')
@@ -746,7 +660,7 @@ def create_net_zero_analysis_plots(results: ModelResults):
     ax2.legend(loc='upper left')
     ax2.grid(True, linestyle=':', linewidth=0.5)
 
-    # --- Plot 3: Energy Mix Profile ---
+    # Plot 3: Energy Mix Profile
     ax3 = axs[1, 0]
     ax3.set_title("Primary Energy Mix Transformation")
     
@@ -763,7 +677,7 @@ def create_net_zero_analysis_plots(results: ModelResults):
     ax3.legend(loc='upper right')
     ax3.grid(True, linestyle=':', linewidth=0.5)
 
-    # --- Plot 4: Sectoral Cost of Transition ---
+    # Plot 4: Sectoral Cost of Transition
     ax4 = axs[1, 1]
     target_year = 2045
     time_index = target_year - 2021
@@ -905,7 +819,6 @@ def create_multi_year_emission_plot(results: ModelResults):
     plt.tight_layout(rect=[0, 0, 1, 0.96])
     plt.show()
 
-# --- END OF NEW CODE BLOCK ---
 def create_combined_water_graphs(results: ModelResults):
     """Create three consolidated subplots for water use, source shares, and investments."""
     pc = results.config.pc
@@ -919,7 +832,7 @@ def create_combined_water_graphs(results: ModelResults):
     water_use_wwater_biophysical = results.macro["water_use_wwater_tot"]
     #water_use_wwater_biophysical = results.macro["water_use_wwater_tot"]
 
-    # --- Define all required variables ---
+    # Define all required variables
     water_use_desal = results.macro["water_use_desal_tot"]
 
     # Ensure wastewater total is defined
@@ -933,7 +846,7 @@ def create_combined_water_graphs(results: ModelResults):
     desal_share = water_use_desal / water_user_emp * 100
     wwater_share = water_use_wwater / water_user_emp * 100
 
-    # --- Create figure ---
+    # Create figure
     _, axs = plt.subplots(1, 3, figsize=(16, 5))
     ax1, ax2, ax3 = axs
 
@@ -1139,24 +1052,20 @@ def create_electricity_graph_twh(results: 'ModelResults'):
     pc = results.config.pc
     years = list(range(2021, 2021 + len(results.macro)))
 
-    # --- Conversion factor from GJ to TWh ---
+    # Conversion factor from GJ to TWh
     # 1 TWh = 1,000 GWh = 3,600,000 GJ (using 1 GWh = 3600 GJ)
-    # If electricity_use_total is in GWh: 1 TWh = 1,000 GWh
-    
-    # Assuming "electricity_use_total" is in GJ, and using your model's
-    # GJ_PER_GWH = 3600 conversion:
-    # GJ -> GWh -> TWh
+    # electricity_use_total is in GJ: GJ -> GWh -> TWh
     GJ_PER_GWH = 3600
     GWH_PER_TWH = 1000
     
     # Convert GJ to TWh
     electricity_twh = (results.macro["electricity_use_total"] / GJ_PER_GWH) / GWH_PER_TWH
 
-    # --- Create figure ---
+    # Create figure
     fig, ax = plt.subplots(figsize=(10, 6))
     fig.suptitle('Total Electricity Consumption Over Time', fontsize=16)
 
-    # --- Plot: Total Electricity Use Over Time (in TWh) ---
+    # Plot: Total Electricity Use Over Time (in TWh)
     ax.plot(years, electricity_twh, label="Total Electricity Use (TWh)", color='blue', marker='s', linestyle='-')
     
     ax.set_xlabel("Year")
@@ -1177,7 +1086,7 @@ def plot_re_generation_and_investment(results: 'ModelResults'):
     import numpy as np
     import pandas as pd
 
-    # --- 1. Data Setup ---
+    # Data Setup
     p = results.config.p
     pc = results.config.pc
     years = np.array(range(2021, 2021 + len(results.macro)))
@@ -1186,7 +1095,7 @@ def plot_re_generation_and_investment(results: 'ModelResults'):
     GJ_TO_TWH = (1 / 3600) / 1000  # GJ -> GWh -> TWh
     TO_BILLION = 1_000_000.0       # Thousand SAR -> Billion SAR
 
-    # --- 2. Extract Generation Data (TWh) ---
+    # Extract Generation Data (TWh)
     gen_total = results.macro["renewable_energy_generation"].values
     gen_solar = results.macro["re_gen_solar"].values
     gen_wind = results.macro["re_gen_wind"].values
@@ -1207,22 +1116,21 @@ def plot_re_generation_and_investment(results: 'ModelResults'):
     # Calculate "Base" Generation (Total - Electrification Load)
     twh_base = np.maximum(0, twh_total - twh_elec_load)
 
-    # --- 3. Extract Specific Investments (Billion SAR) ---
-    # UPDATED: Use the new segregated variables directly
-    # Check if keys exist (backward compatibility), otherwise fallback to 0
+    # Extract Specific Investments (Billion SAR)
+    # Technology-specific investment, or an estimate from generation shares if not available
     if "I_solar" in results.macro:
         inv_solar_bn = results.macro["I_solar"].values / TO_BILLION
         inv_wind_bn = results.macro["I_wind"].values / TO_BILLION
         inv_bio_bn = results.macro["I_bio"].values / TO_BILLION
     else:
-        # Fallback if model wasn't updated (estimate based on shares)
+        # Estimate based on generation shares
         total_re_inv = results.macro["I_RE"].values
         with np.errstate(divide='ignore', invalid='ignore'):
             inv_solar_bn = (total_re_inv * np.where(gen_total>0, gen_solar/gen_total, 0)) / TO_BILLION
             inv_wind_bn = (total_re_inv * np.where(gen_total>0, gen_wind/gen_total, 0)) / TO_BILLION
             inv_bio_bn = (total_re_inv * np.where(gen_total>0, gen_bio/gen_total, 0)) / TO_BILLION
 
-    # --- 4. Plotting ---
+    # Plotting
     fig, ax = plt.subplots(figsize=(14, 8))
     
     # A. Stackplot for Context (Base vs Electrification)
@@ -1235,7 +1143,7 @@ def plot_re_generation_and_investment(results: 'ModelResults'):
     ax.plot(years, twh_wind, label="Wind", color='#87CEEB', linewidth=2.5, linestyle='--')
     ax.plot(years, twh_bio, label="Bioenergy", color='#8B4513', linewidth=2, linestyle=':')
 
-    # --- 5. Annotations: Investment Costs at 5-Year Steps ---
+    # Annotations: Investment Costs at 5-Year Steps
     milestones = [y for y in years if y % 5 == 0 and y >= 2025]
     bbox_props = dict(boxstyle="round,pad=0.3", fc="white", ec="gray", alpha=0.9)
 
@@ -1263,7 +1171,7 @@ def plot_re_generation_and_investment(results: 'ModelResults'):
                             ha='center', color='#4682B4', fontweight='bold',
                             bbox=bbox_props)
             
-            # 3. Bioenergy Investment Annotation (NEW)
+            # 3. Bioenergy Investment Annotation
             val_bio = inv_bio_bn[idx]
             if val_bio > 0.05:
                 ax.plot(year, twh_bio[idx], marker='o', color='#8B4513', markersize=8)
@@ -1274,22 +1182,22 @@ def plot_re_generation_and_investment(results: 'ModelResults'):
                             ha='center', color='#8B4513', fontweight='bold',
                             bbox=bbox_props)
 
-    # --- 6. Display Target Shares ---
+    # Display Target Shares
     tgt_solar = getattr(p, 'target_solar_share_2030', 0.75)
     tgt_wind = getattr(p, 'target_wind_share_2030', 0.20)
     tgt_bio = getattr(p, 'target_bio_share_2030', 0.05)
     
     info_text = (
         f"2030 TARGET MIX:\n"
-        f"☀ Solar: {tgt_solar:.0%}\n"
-        f"༄ Wind: {tgt_wind:.0%}\n"
-        f"♻ Bio: {tgt_bio:.0%}"
+        f"Solar: {tgt_solar:.0%}\n"
+        f"Wind: {tgt_wind:.0%}\n"
+        f"Bio: {tgt_bio:.0%}"
     )
     
     ax.text(0.02, 0.95, info_text, transform=ax.transAxes, fontsize=11,
             verticalalignment='top', bbox=dict(boxstyle='round', facecolor='#f0f0f0', alpha=0.9))
 
-    # --- 7. Formatting ---
+    # Formatting
     ax.set_title("Renewable Energy Generation (TWh) & Required Investment", fontsize=16, fontweight='bold')
     ax.set_ylabel("Energy Generation (TWh)", fontsize=12, fontweight='bold')
     ax.set_xlabel("Year", fontsize=12)
@@ -1317,7 +1225,7 @@ def plot_electrification_target_sectors(results: 'ModelResults'):
     
     pc = results.config.pc
     
-    # --- 1. Data Prep ---
+    # Data Prep
     # Calculate Total Fossil Intensity (GJ per Thousand SAR Output)
     fossil_intensity = pc.gas_intensities_ + pc.oil_intensities_
     
@@ -1329,11 +1237,10 @@ def plot_electrification_target_sectors(results: 'ModelResults'):
         'Total Fossil Intensity': fossil_intensity
     })
     
-    # Exclude the Electricity Sector itself (as per logic)
-    # We filter strings that contain "Electricity"
+    # Exclude the Electricity Sector itself
+    # Filter names that contain "Electricity"
     df = df[~df['Sector'].str.contains("Electricity, gas, steam")]
     
-    # Sort by Total Intensity (Descending)
     df_sorted = df.sort_values(by='Total Fossil Intensity', ascending=True) # Ascending for horizontal bar plot
     
     # Top 25 sectors shown for legibility
@@ -1341,7 +1248,7 @@ def plot_electrification_target_sectors(results: 'ModelResults'):
     df_plot = df_sorted.tail(25)
     
     # Identify which ones are actually in the "Target List"
-    # We re-derive the indices to match the calibration logic exactly
+    # Electrification target sectors from the calibration
     target_indices = list(pc.electrification_target_sectors)
     target_names = [pc.sectors[i] for i in target_indices]
     
@@ -1353,12 +1260,11 @@ def plot_electrification_target_sectors(results: 'ModelResults'):
         else:
             colors.append('#d9d9d9') # Grey for others
             
-    # --- 2. Plotting ---
+    # Plotting
     fig, ax = plt.subplots(figsize=(12, 10))
     
     # Horizontal Bar Chart (Stacked Oil vs Gas)
-    # We plot Gas first, then Oil on top
-    # Note: We use the sorted dataframe indices for plotting
+    # Gas first, then Oil on top, in the order of the sorted dataframe
     
     y_pos = np.arange(len(df_plot))
     
@@ -1372,7 +1278,7 @@ def plot_electrification_target_sectors(results: 'ModelResults'):
             total_val = df_plot.iloc[i]['Total Fossil Intensity']
             ax.barh(y_pos[i], total_val, color='none', edgecolor='#ff7f0e', linewidth=2)
 
-    # --- 3. Formatting ---
+    # Formatting
     ax.set_yticks(y_pos)
     ax.set_yticklabels(df_plot['Sector'], fontsize=10)
     
@@ -1418,14 +1324,13 @@ def plot_electrification_impact(results: 'ModelResults'):
         print("Electrification Strategy is OFF. Skipping plot.")
         return
 
-    # --- 1. Data Extraction & Calculation ---
+    # Data Extraction & Calculation
     years = np.array(range(2021, 2021 + len(results.macro)))
     
     # Get Investment Flow (Thousand SAR)
     inv_electrification = results.macro['I_electrification_total'].values
     
     # Get Cost Parameter (SAR/GJ)
-    # We use getattr in case the parameter is missing (defaults to 300)
     cost_per_gj = getattr(p, 'electrification_cost_per_gj', 300.0)
     
     # Back-calculate the Physical Energy Shifted
@@ -1446,7 +1351,7 @@ def plot_electrification_impact(results: 'ModelResults'):
     data_twh = total_gj_electrified_in_year * TO_TWH
     data_cost_bn = inv_electrification / TO_BILLION
 
-    # --- 2. Plotting ---
+    # Plotting
     fig, ax1 = plt.subplots(figsize=(12, 7))
     
     # A. Area Chart: Cumulative Energy Shifted (The "Wedge")
@@ -1459,7 +1364,7 @@ def plot_electrification_impact(results: 'ModelResults'):
     ax1.tick_params(axis='y', labelcolor=color_energy)
     ax1.set_ylim(bottom=0)
     
-    # B. Bar Chart: Annual Investment (The Cost)
+    # B. Bar Chart: Annual Investment
     ax2 = ax1.twinx()
     color_cost = '#ff7f0e' # Orange
     
@@ -1470,7 +1375,7 @@ def plot_electrification_impact(results: 'ModelResults'):
     ax2.tick_params(axis='y', labelcolor=color_cost)
     ax2.set_ylim(0, max(data_cost_bn) * 1.5) # Give headroom for labels
 
-    # --- 3. Annotations ---
+    # Annotations
     # Annotate total TWh shifted at the end
     final_year = years[-1]
     final_twh = data_twh[-1]
@@ -1492,7 +1397,7 @@ def plot_electrification_impact(results: 'ModelResults'):
                      xytext=(0, 10), textcoords='offset points',
                      ha='center', fontsize=9, color='#cc5500', fontweight='bold')
 
-    # --- 4. Final Layout ---
+    # Final Layout
     plt.title("Industrial Electrification: Energy Shift vs. Investment Cost", fontsize=16, fontweight='bold')
     ax1.grid(True, linestyle=':', alpha=0.6)
     
@@ -1521,13 +1426,12 @@ def plot_electrification_emission_benefit(results: 'ModelResults'):
 
     years = np.array(range(2021, 2021 + len(results.macro)))
     
-    # --- 1. Reconstruct the "Counterfactual" Baseline ---
+    # Reconstruct the "Counterfactual" Baseline
     rate = p.electrification_annual_rate
     shift_pct_curve = np.array([1.0 - (1.0 - rate)**(t) for t in range(len(years))])
     
     target_indices = pc.electrification_target_sectors
     
-    # --- CORRECTION: REMOVED TRAILING UNDERSCORES FROM KEYS ---
     actual_oil_use = results.sectoral['oil_use_final'][target_indices].sum(axis=1).values
     actual_gas_use = results.sectoral['gas_use_final'][target_indices].sum(axis=1).values
     
@@ -1541,7 +1445,7 @@ def plot_electrification_emission_benefit(results: 'ModelResults'):
     oil_removed_gj = baseline_oil_use - actual_oil_use
     gas_removed_gj = baseline_gas_use - actual_gas_use
     
-    # --- 2. Calculate Emission Flows (MtCO2) ---
+    # Calculate Emission Flows (MtCO2)
     saved_oil_ems = oil_removed_gj * pc.oil_emission_factor
     saved_gas_ems = gas_removed_gj * pc.gas_emission_factor
     total_direct_savings = saved_oil_ems + saved_gas_ems
@@ -1559,7 +1463,7 @@ def plot_electrification_emission_benefit(results: 'ModelResults'):
     total_indirect_added = elec_added_gj * grid_intensity
     net_reduction = total_direct_savings - total_indirect_added
 
-    # --- 3. Plotting ---
+    # Plotting
     fig, ax = plt.subplots(figsize=(12, 7))
     
     ax.fill_between(years, 0, total_direct_savings, color='#2ca02c', alpha=0.3, label='Direct Abatement (Avoided Fossil)')
@@ -1571,9 +1475,9 @@ def plot_electrification_emission_benefit(results: 'ModelResults'):
     ax.plot(years, net_reduction, color='black', linewidth=3, marker='o', markersize=4, label='NET Emission Reduction')
     
     #txt_stats = (f"Strategy Details:\n"
-    #             f"• Annual Shift Rate: {rate:.1%}\n"
-    #             f"• Efficiency (COP): {cop:.1f}\n"
-    #             f"• Grid Strategy: 100% RE Replacement")
+    #             f"- Annual Shift Rate: {rate:.1%}\n"
+    #             f"- Efficiency (COP): {cop:.1f}\n"
+    #             f"- Grid Strategy: 100% RE Replacement")
     
     #ax.text(0.02, 0.95, txt_stats, transform=ax.transAxes, va='top', fontsize=11,
     #        bbox=dict(boxstyle="round,pad=0.4", fc="white", ec="black", alpha=0.9))
@@ -1609,12 +1513,11 @@ def plot_sectoral_fuel_mix_transition(results: 'ModelResults'):
     # Scale to Million GJ (or PJ) for readability
     scale = 1_000_000
     
-    # --- CORRECTION: REMOVED TRAILING UNDERSCORES FROM KEYS ---
     use_oil = results.sectoral['oil_use_final'][target_indices].sum(axis=1).values / scale
     use_gas = results.sectoral['gas_use_final'][target_indices].sum(axis=1).values / scale
     use_elec = results.sectoral['electricity_use'][target_indices].sum(axis=1).values / scale
     
-    # --- Plotting ---
+    # Plotting
     fig, ax = plt.subplots(figsize=(12, 7))
     
     # Stackplot
@@ -1669,9 +1572,9 @@ def plot_oil_and_gas_switching(results: 'ModelResults'):
         return
 
     # 2. Calculate the *change* in TWh
-    # Oil reduction should be positive (Original > Final)
+    # Oil reduction (original - final)
     df_oil_reduction_twh = (df_oil_original - df_oil_final) * GJ_TO_TWH
-    # Gas increase should be positive (Final > Original)
+    # Gas increase (final - original)
     df_gas_increase_twh = (df_gas_final - df_gas_original) * GJ_TO_TWH
 
     # 3. Identify the indices for each of the 3 target categories
@@ -1712,10 +1615,10 @@ def plot_oil_and_gas_switching(results: 'ModelResults'):
         'Agriculture': gas_agri_increase
     }, index=years)
 
-    # 6. Create the plot (side-by-side subplots)
+    # 6. Create the plot (two stacked panels)
     fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, figsize=(12, 12), sharex=True)
     
-    # --- Plot 1: Oil Reduction ---
+    # Plot 1: Oil Reduction
     plot_df_oil.plot(
         kind='bar',
         stacked=True,
@@ -1727,7 +1630,7 @@ def plot_oil_and_gas_switching(results: 'ModelResults'):
     ax1.grid(axis='y', linestyle='--', alpha=0.7)
     ax1.legend(title='Sector Categories', loc='upper left')
 
-    # --- Plot 2: Gas Increase ---
+    # Plot 2: Gas Increase
     plot_df_gas.plot(
         kind='bar',
         stacked=True,
@@ -1757,17 +1660,17 @@ def create_renewable_energy_graphs(results: ModelResults):
     p = results.config.p
     years = list(range(2021, 2021 + len(df_macro)))
     
-    # --- Conversion factor from GJ to Exajoules (EJ) for better readability ---
+    # Conversion factor from GJ to Exajoules (EJ) for better readability
     GJ_TO_EJ = 1e-9
 
-    # --- Create Figure ---
+    # Create Figure
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(22, 6))
     
     # Set main title based on the scenario run
     scenario_title = "Vision 2030 Scenario" if p.vision_2030_renewable_target else "Trend Scenario"
     fig.suptitle(f"Energy and Emissions Analysis: {scenario_title}", fontsize=16)
 
-    # --- Plot 1: Total Primary Energy Consumption by Source (Corrected) ---
+    # Plot 1: Total Primary Energy Consumption by Source
     ax1.set_title("Primary Energy Mix by Source")
     
     # Convert final primary energy data to EJ for plotting
@@ -1785,7 +1688,7 @@ def create_renewable_energy_graphs(results: ModelResults):
     ax1.legend(loc='upper left')
     ax1.grid(True, linestyle='--', linewidth=0.5)
 
-    # --- Plot 2: Share of Renewable Energy (Unchanged) ---
+    # Plot 2: Share of Renewable Energy
     ax2.set_title("Share of Renewables in Total Energy Demand")
     ax2.plot(years, df_macro["renewable_energy_share"] * 100,
              label="Renewable Energy Share (%)", color='green', marker='.')
@@ -1800,7 +1703,7 @@ def create_renewable_energy_graphs(results: ModelResults):
     ax2.legend()
     ax2.grid(True, linestyle='--', linewidth=0.5)
 
-    # --- Plot 3: Total Greenhouse Gas Emissions (Unchanged) ---
+    # Plot 3: Total Greenhouse Gas Emissions
     ax3.set_title("Total GHG Emissions by Source")
     ax3.stackplot(years, df_macro["oil_emissions_total"], df_macro["gas_emissions_total"], df_macro["electricity_emissions_total"],
                   labels=['Oil Emissions', 'Gas Emissions', 'Electricity Emissions'],
@@ -1828,10 +1731,10 @@ def create_energy_efficiency_plot(results: ModelResults):
     years = list(range(2021, 2021 + len(df_efficiency)))
     final_year = years[-1]
     
-    fig, ax = plt.subplots(figsize=(14, 10)) # Increased height for table space
+    fig, ax = plt.subplots(figsize=(14, 10)) # extra height for the table
     
     # 1. Plotting and Annotating Tiers
-    # --- Top 20 (Red) ---
+    # Top 20 (Red)
     ax.plot(years, df_efficiency[pc.top_20_energy_sectors[0]], color='red', alpha=0.9, 
             label=f'Top 20 Intensive Sectors ({p.efficiency_top_tier_annual_gain*100}%/yr)')
     ax.text(final_year + 0.5, df_efficiency[pc.top_20_energy_sectors[0]].iloc[-1], 
@@ -1839,7 +1742,7 @@ def create_energy_efficiency_plot(results: ModelResults):
     for sector_index in pc.top_20_energy_sectors[1:]:
         ax.plot(years, df_efficiency[sector_index], color='red', alpha=0.15)
 
-    # --- Mid 20 (Orange) ---
+    # Mid 20 (Orange)
     ax.plot(years, df_efficiency[pc.mid_20_energy_sectors[0]], color='orange', alpha=0.9, 
             label=f'Mid 20 Intensive Sectors ({p.efficiency_mid_tier_annual_gain*100}%/yr)')
     ax.text(final_year + 0.5, df_efficiency[pc.mid_20_energy_sectors[0]].iloc[-1], 
@@ -1847,7 +1750,7 @@ def create_energy_efficiency_plot(results: ModelResults):
     for sector_index in pc.mid_20_energy_sectors[1:]:
         ax.plot(years, df_efficiency[sector_index], color='orange', alpha=0.15)
 
-    # --- Low (Green) ---
+    # Low (Green)
     ax.plot(years, df_efficiency[pc.low_energy_sectors[0]], color='green', alpha=0.9, 
             label=f'Low Intensive Sectors ({p.efficiency_low_tier_annual_gain*100}%/yr)')
     ax.text(final_year + 0.5, df_efficiency[pc.low_energy_sectors[0]].iloc[-1], 
@@ -1890,17 +1793,16 @@ def create_energy_efficiency_plot(results: ModelResults):
                 format='pdf', dpi=300, bbox_inches='tight')
     
     plt.show()
-# --- END OF NEW FUNCTION ---
 
 
 def plot_vision_2030_results(results: ModelResults):
     """
-    Plots the key outcomes of the new Vision 2030 energy policy.
+    Plots the key outcomes of the Vision 2030 energy policy.
     
     Assumes 'results' is the ModelResults object from running the model.
     """
     
-    # --- Helper data ---
+    # Helper data
     pc = results.config.pc
     p = results.config.p
     macro = results.macro
@@ -1922,7 +1824,7 @@ def plot_vision_2030_results(results: ModelResults):
     # Conversion factor for plotting (GJ to Terajoules)
     GJ_TO_TJ = 1 / 1000
 
-    # --- 1. Plot Electricity Generation Mix ---
+    # Plot Electricity Generation Mix
     
     # Get data
     elec_demand_total = macro['electricity_use_total'] * GJ_TO_TJ
@@ -1933,7 +1835,7 @@ def plot_vision_2030_results(results: ModelResults):
     oil_input_elec = sectoral['oil_use_final'].iloc[:, elec_idx] * GJ_TO_TJ
     
     # Calculate the "traditional" generation
-    # We assume the RE portion directly meets demand
+    # The RE portion directly meets demand
     re_met_demand = np.minimum(elec_demand_total, re_gen_total)
     traditional_met_demand = elec_demand_total - re_met_demand
     
@@ -1959,7 +1861,7 @@ def plot_vision_2030_results(results: ModelResults):
     ax1b.set_ylim(0, 100)
     ax1b.legend(loc='upper right')
 
-    # --- 2. Plot Oil Use in Targeted Sectors ---
+    # Plot Oil Use in Targeted Sectors
     
     # Get oil use for targeted sectors
     oil_use_targeted = sectoral['oil_use_final'].iloc[:, oil_reduce_indices].sum(axis=1) * GJ_TO_TJ
@@ -1993,7 +1895,6 @@ def create_sectoral_graphs(results: ModelResults, displayPlots: bool = True):
     # Create one-letter NACE codes for each sector
     ###################################################################
     # Full section names for NACE sections
-    # Full section names for NACE sections
     nace_section_full_names = {
         "A": "A - Agriculture, forestry and fishing",
         "B": "B - Mining and quarrying",
@@ -2019,10 +1920,9 @@ def create_sectoral_graphs(results: ModelResults, displayPlots: bool = True):
 
     def get_nace_section_letter_by_number(idx):
         # Map sector index (0-based) to a NACE code (1-based)
-        # MM changed these codes by hand to adjust for missing sectors.
-        # See e.g. here for the sectoral classification in KSA: https://www.stats.gov.sa/en/w/%D8%A7%D9%84%D8%AA%D8%B5%D9%86%D9%8A%D9%81-%D8%A7%D9%84%D9%88%D8%B7%D9%86%D9%8A-%D9%84%D9%84%D8%A3%D9%86%D8%B4%D8%B7%D8%A9-%D8%A7%D9%84%D8%A7%D9%82%D8%AA%D8%B5%D8%A7%D8%AF%D9%8A%D8%A9?id=2812935
-        # The correspondence made by MM can be found on GITHUB:
-        # C:\Users\MIESSMG\SFC_CORE3\input_data\MM_Excels_Working\National Classification for the Economic Activities(SSIC)_Jan_2025_En_MMKENModified
+        # Codes adjusted by hand for missing sectors.
+        # Sectoral classification in KSA: https://www.stats.gov.sa/en/w/%D8%A7%D9%84%D8%AA%D8%B5%D9%86%D9%8A%D9%81-%D8%A7%D9%84%D9%88%D8%B7%D9%86%D9%8A-%D9%84%D9%84%D8%A3%D9%86%D8%B4%D8%B7%D8%A9-%D8%A7%D9%84%D8%A7%D9%82%D8%AA%D8%B5%D8%A7%D8%AF%D9%8A%D8%A9?id=2812935
+        # Correspondence table: National Classification for the Economic Activities (SSIC), Jan 2025, adapted to the KEN sectors
         code_int = idx
         if 0 <= code_int <= 2: return "A"
         elif 3 <= code_int <= 7: return "B"
@@ -2052,15 +1952,13 @@ def create_sectoral_graphs(results: ModelResults, displayPlots: bool = True):
         for idx in range(85)
     }
 
-    # If you have a DataFrame with sector columns 0..84 (e.g. results.sectoral['Y'])
-    # You can aggregate it:
+    # Aggregate a DataFrame with sector columns 0..84 (e.g. results.sectoral['Y']) to NACE sections
     def aggregate_to_nace_sections(df):
         section_labels = pd.Series(sector_number_to_nace_section_full)
         return df.groupby(section_labels, axis=1).sum()
 
     
 
-    # For checking the mapping:
 
 
 
@@ -2088,8 +1986,8 @@ def create_sectoral_graphs(results: ModelResults, displayPlots: bool = True):
     axs.set_ylabel("Thousand SAR")
     axs.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=13)
     end_period = results.sectoral['Y'].index[-1]
-    top_sectors_start = results.sectoral['Y'].loc[1].nlargest(5).index  # Top 10 sectors by output at start
-    top_sectors_end = results.sectoral['Y'].loc[end_period].nlargest(5).index  # Top 10 sectors by output by the end
+    top_sectors_start = results.sectoral['Y'].loc[1].nlargest(5).index  # Top 5 sectors by output at start
+    top_sectors_end = results.sectoral['Y'].loc[end_period].nlargest(5).index  # Top 5 sectors by output by the end
     sector_notes_start = [f"Start - Sector {sector}: {pc.sectors[sector]}" for sector in top_sectors_start]
     sector_notes_end = [f"End - Sector {sector}: {pc.sectors[sector]}" for sector in top_sectors_end]
     # Combine the notes into one joint string
@@ -2109,8 +2007,8 @@ def create_sectoral_graphs(results: ModelResults, displayPlots: bool = True):
     axs.set_ylabel("Thousand SAR")
     axs.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=13)
     end_period = results.sectoral['X'].index[-1]
-    top_sectors_start = results.sectoral['X'].loc[1].nlargest(5).index  # Top 10 sectors by output at start
-    top_sectors_end = results.sectoral['X'].loc[end_period].nlargest(5).index  # Top 10 sectors by output by the end
+    top_sectors_start = results.sectoral['X'].loc[1].nlargest(5).index  # Top 5 sectors by output at start
+    top_sectors_end = results.sectoral['X'].loc[end_period].nlargest(5).index  # Top 5 sectors by output by the end
     sector_notes_start = [f"Start - Sector {sector}: {pc.sectors[sector]}" for sector in top_sectors_start]
     sector_notes_end = [f"End - Sector {sector}: {pc.sectors[sector]}" for sector in top_sectors_end]
     # Combine the notes into one joint string
@@ -2130,8 +2028,8 @@ def create_sectoral_graphs(results: ModelResults, displayPlots: bool = True):
     axs.set_ylabel("Thousand SAR")
     axs.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=13)
     end_period = results.sectoral['I'].index[-1]
-    top_sectors_start = results.sectoral['I'].loc[1].nlargest(5).index  # Top 10 sectors by output at start
-    top_sectors_end = results.sectoral['I'].loc[end_period].nlargest(5).index  # Top 10 sectors by output by the end
+    top_sectors_start = results.sectoral['I'].loc[1].nlargest(5).index  # Top 5 sectors by output at start
+    top_sectors_end = results.sectoral['I'].loc[end_period].nlargest(5).index  # Top 5 sectors by output by the end
     sector_notes_start = [f"Start - Sector {sector}: {pc.sectors[sector]}" for sector in top_sectors_start]
     sector_notes_end = [f"End - Sector {sector}: {pc.sectors[sector]}" for sector in top_sectors_end]
     # Combine the notes into one joint string
@@ -2153,8 +2051,8 @@ def create_sectoral_graphs(results: ModelResults, displayPlots: bool = True):
     axs.set_ylabel("Thousand SAR")
     axs.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=13)
     end_period = results.sectoral['W'].index[-1]
-    top_sectors_start = results.sectoral['W'].loc[1].nlargest(5).index  # Top 10 sectors by output at start
-    top_sectors_end = results.sectoral['W'].loc[end_period].nlargest(5).index  # Top 10 sectors by output by the end
+    top_sectors_start = results.sectoral['W'].loc[1].nlargest(5).index  # Top 5 sectors by output at start
+    top_sectors_end = results.sectoral['W'].loc[end_period].nlargest(5).index  # Top 5 sectors by output by the end
     sector_notes_start = [f"Start - Sector {sector}: {pc.sectors[sector]}" for sector in top_sectors_start]
     sector_notes_end = [f"End - Sector {sector}: {pc.sectors[sector]}" for sector in top_sectors_end]
     # Combine the notes into one joint string
@@ -2213,8 +2111,8 @@ def create_sectoral_graphs(results: ModelResults, displayPlots: bool = True):
     axs.set_ylabel("Thousand SAR")
     axs.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=13)
     end_period = results.sectoral['IM'].index[-1]
-    top_sectors_start = results.sectoral['IM'].loc[1].nlargest(5).index  # Top 10 sectors by output at start
-    top_sectors_end = results.sectoral['IM'].loc[end_period].nlargest(5).index  # Top 10 sectors by output by the end
+    top_sectors_start = results.sectoral['IM'].loc[1].nlargest(5).index  # Top 5 sectors by output at start
+    top_sectors_end = results.sectoral['IM'].loc[end_period].nlargest(5).index  # Top 5 sectors by output by the end
     sector_notes_start = [f"Start - Sector {sector}: {pc.sectors[sector]}" for sector in top_sectors_start]
     sector_notes_end = [f"End - Sector {sector}: {pc.sectors[sector]}" for sector in top_sectors_end]
     # Combine the notes into one joint string
@@ -2235,8 +2133,8 @@ def create_sectoral_graphs(results: ModelResults, displayPlots: bool = True):
     axs.set_ylabel("Thousand SAR")
     axs.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=13)
     end_period = results.sectoral['K'].index[-1]
-    top_sectors_start = results.sectoral['K'].loc[1].nlargest(5).index  # Top 10 sectors by output at start
-    top_sectors_end = results.sectoral['K'].loc[end_period].nlargest(5).index  # Top 10 sectors by output by the end
+    top_sectors_start = results.sectoral['K'].loc[1].nlargest(5).index  # Top 5 sectors by output at start
+    top_sectors_end = results.sectoral['K'].loc[end_period].nlargest(5).index  # Top 5 sectors by output by the end
     sector_notes_start = [f"Start - Sector {sector}: {pc.sectors[sector]}" for sector in top_sectors_start]
     sector_notes_end = [f"End - Sector {sector}: {pc.sectors[sector]}" for sector in top_sectors_end]
     # Combine the notes into one joint string
@@ -2257,8 +2155,8 @@ def create_sectoral_graphs(results: ModelResults, displayPlots: bool = True):
     axs.set_ylabel("Thousand SAR")
     axs.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=13)
     end_period = results.sectoral['IntP'].index[-1]
-    top_sectors_start = results.sectoral['IntP'].loc[1].nlargest(5).index  # Top 10 sectors by output at start
-    top_sectors_end = results.sectoral['IntP'].loc[end_period].nlargest(5).index  # Top 10 sectors by output by the end
+    top_sectors_start = results.sectoral['IntP'].loc[1].nlargest(5).index  # Top 5 sectors by output at start
+    top_sectors_end = results.sectoral['IntP'].loc[end_period].nlargest(5).index  # Top 5 sectors by output by the end
     sector_notes_start = [f"Start - Sector {sector}: {pc.sectors[sector]}" for sector in top_sectors_start]
     sector_notes_end = [f"End - Sector {sector}: {pc.sectors[sector]}" for sector in top_sectors_end]
     # Combine the notes into one joint string
@@ -2278,8 +2176,8 @@ def create_sectoral_graphs(results: ModelResults, displayPlots: bool = True):
     axs.set_ylabel("Thousand SAR")
     axs.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), ncol=13)
     end_period = results.sectoral['EX'].index[-1]
-    top_sectors_start = results.sectoral['EX'].loc[1].nlargest(5).index  # Top 10 sectors by output at start
-    top_sectors_end = results.sectoral['EX'].loc[end_period].nlargest(5).index  # Top 10 sectors by output by the end
+    top_sectors_start = results.sectoral['EX'].loc[1].nlargest(5).index  # Top 5 sectors by output at start
+    top_sectors_end = results.sectoral['EX'].loc[end_period].nlargest(5).index  # Top 5 sectors by output by the end
     sector_notes_start = [f"Start - Sector {sector}: {pc.sectors[sector]}" for sector in top_sectors_start]
     sector_notes_end = [f"End - Sector {sector}: {pc.sectors[sector]}" for sector in top_sectors_end]
     # Combine the notes into one joint string
@@ -2305,7 +2203,6 @@ def create_sectoral_graphs(results: ModelResults, displayPlots: bool = True):
     axs.set_xlabel("Time")
     axs.set_ylabel("Thousand SAR")
     axs.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=2)
-    # Update notes to display the names of the top 10 sectors
 
 
     # Plot investment public to inspect
@@ -2364,18 +2261,17 @@ def create_sectoral_graphs(results: ModelResults, displayPlots: bool = True):
     EX_agg   = aggregate_to_nace_sections(results.sectoral['EX']).loc[1]
     GY_agg   = aggregate_to_nace_sections(results.sectoral['GY']).loc[1]
     C_agg    = aggregate_to_nace_sections(results.sectoral['C']).loc[1]
-    # For calibrated imports, you may need to aggregate as well:
+    # Aggregate calibrated imports
     IM_calib_agg = aggregate_to_nace_sections(pd.DataFrame(pc.IM_).T).iloc[0]
     # Calculate other components of Y
     Other_Y_agg = Y_agg - W_agg - P_agg
-    # Mapping from long name → short letter
+    # Mapping from long name to short letter
     long_to_short = {v: k for k, v in nace_section_full_names.items()}
     sections_long = Y_agg.index
     sections_short = [long_to_short.get(name, name) for name in sections_long]
     bar_width = 0.25
     indices = np.arange(len(sections_short))
-    # Suppose your DataFrame looks like this after aggregation:
-    # Its columns are long names, e.g. "A - Agriculture, forestry and fishing"
+    # Columns are long section names, e.g. "A - Agriculture, forestry and fishing"
     columns_long = Y_onedigit_.columns
     legend_labels = [long_to_short.get(col, col) for col in columns_long]
     fig, ax = plt.subplots(figsize=(15, 8))
@@ -2456,7 +2352,7 @@ def create_sectoral_graphs(results: ModelResults, displayPlots: bool = True):
     #############################################################################################################################
     # LAST PERIOD AGREGATE Plot sectoral decomposition of components of X total output, in relation Y value added GDP and to Imports!
     # LAST PERIOD
-    # Aggregated data for calibration period (period 1)
+    # Aggregated data for the last period (intermediate inputs from period 1)
     IntP_agg = aggregate_to_nace_sections(results.sectoral['IntP']).loc[1]
     W_agg    = aggregate_to_nace_sections(results.sectoral['W']).loc[end_period]
     P_agg    = aggregate_to_nace_sections(results.sectoral['P']).loc[end_period]
@@ -2466,13 +2362,13 @@ def create_sectoral_graphs(results: ModelResults, displayPlots: bool = True):
     EX_agg   = aggregate_to_nace_sections(results.sectoral['EX']).loc[end_period]
     GY_agg   = aggregate_to_nace_sections(results.sectoral['GY']).loc[end_period]
     C_agg    = aggregate_to_nace_sections(results.sectoral['C']).loc[end_period]
-    # For calibrated imports, you may need to aggregate as well:
+    # Aggregate calibrated imports
     IM_calib_agg = aggregate_to_nace_sections(pd.DataFrame(pc.IM_).T).iloc[0]
 
     # Calculate other components of Y
     Other_Y_agg = Y_agg - W_agg - P_agg
 
-    # Mapping from long name → short letter
+    # Mapping from long name to short letter
     long_to_short = {v: k for k, v in nace_section_full_names.items()}
 
     sections_long = Y_agg.index
@@ -2482,8 +2378,7 @@ def create_sectoral_graphs(results: ModelResults, displayPlots: bool = True):
     indices = np.arange(len(sections_short))
 
 
-    # Suppose your DataFrame looks like this after aggregation:
-    # Its columns are long names, e.g. "A - Agriculture, forestry and fishing"
+    # Columns are long section names, e.g. "A - Agriculture, forestry and fishing"
     columns_long = Y_onedigit_.columns
     legend_labels = [long_to_short.get(col, col) for col in columns_long]
 
@@ -2601,7 +2496,6 @@ def create_detailed_sectoral_graphs(results: ModelResults, displayPlots: bool = 
     # Create one-letter NACE codes for each sector
     ###################################################################
     # Full section names for NACE sections
-    # Full section names for NACE sections
     nace_section_full_names = {
         "A": "A - Agriculture, forestry and fishing",
         "B": "B - Mining and quarrying",
@@ -2627,10 +2521,9 @@ def create_detailed_sectoral_graphs(results: ModelResults, displayPlots: bool = 
 
     def get_nace_section_letter_by_number(idx):
         # Map sector index (0-based) to a NACE code (1-based)
-        # MM changed these codes by hand to adjust for missing sectors.
-        # See e.g. here for the sectoral classification in KSA: https://www.stats.gov.sa/en/w/%D8%A7%D9%84%D8%AA%D8%B5%D9%86%D9%8A%D9%81-%D8%A7%D9%84%D9%88%D8%B7%D9%86%D9%8A-%D9%84%D9%84%D8%A3%D9%86%D8%B4%D8%B7%D8%A9-%D8%A7%D9%84%D8%A7%D9%82%D8%AA%D8%B5%D8%A7%D8%AF%D9%8A%D8%A9?id=2812935
-        # The correspondence made by MM can be found on GITHUB:
-        # C:\Users\MIESSMG\SFC_CORE3\input_data\MM_Excels_Working\National Classification for the Economic Activities(SSIC)_Jan_2025_En_MMKENModified
+        # Codes adjusted by hand for missing sectors.
+        # Sectoral classification in KSA: https://www.stats.gov.sa/en/w/%D8%A7%D9%84%D8%AA%D8%B5%D9%86%D9%8A%D9%81-%D8%A7%D9%84%D9%88%D8%B7%D9%86%D9%8A-%D9%84%D9%84%D8%A3%D9%86%D8%B4%D8%B7%D8%A9-%D8%A7%D9%84%D8%A7%D9%82%D8%AA%D8%B5%D8%A7%D8%AF%D9%8A%D8%A9?id=2812935
+        # Correspondence table: National Classification for the Economic Activities (SSIC), Jan 2025, adapted to the KEN sectors
         code_int = idx
         if 0 <= code_int <= 2: return "A"
         elif 3 <= code_int <= 7: return "B"
@@ -2659,8 +2552,7 @@ def create_detailed_sectoral_graphs(results: ModelResults, displayPlots: bool = 
         idx: nace_section_full_names.get(get_nace_section_letter_by_number(idx), "Other")
         for idx in range(85)
     }
-    # If you have a DataFrame with sector columns 0..84 (e.g. results.sectoral['Y'])
-    # You can aggregate it:
+    # Aggregate a DataFrame with sector columns 0..84 (e.g. results.sectoral['Y']) to NACE sections
     def aggregate_to_nace_sections(df):
         section_labels = pd.Series(sector_number_to_nace_section_full)
         return df.groupby(section_labels, axis=1).sum()
@@ -2683,7 +2575,6 @@ def create_detailed_sectoral_graphs(results: ModelResults, displayPlots: bool = 
     Other_Y_ = Y_ - W_ - P_
     # Create figure and axes
 
-    # For checking the mapping:
 
 
 
@@ -2749,7 +2640,7 @@ def create_detailed_sectoral_graphs(results: ModelResults, displayPlots: bool = 
     bar_width = 0.25
     indices = np.arange(len(top_sectors))
     top_sector_notes = [f"Sector {index}: {pc.sectors[index]}" for index in top_sectors]
-    # Plot X decomposition for top 15 sectors
+    # Plot X decomposition for top 10 sectors
     ax.bar(indices - bar_width/2, IntP_top, bar_width, label='Intermediate Inputs (X)')
     ax.bar(indices - bar_width/2, W_top, bar_width, bottom=IntP_top, label='Wages (X)')
     ax.bar(indices - bar_width/2, P_top, bar_width, bottom=IntP_top + W_top, label='Profits (X)')
@@ -2785,7 +2676,7 @@ def create_detailed_sectoral_graphs(results: ModelResults, displayPlots: bool = 
     bar_width = 0.25
     indices = np.arange(len(top_sectors))
     top_sector_notes = [f"Sector {index}: {pc.sectors[index]}" for index in top_sectors]
-    # Plot X decomposition for top 15 sectors
+    # Plot X decomposition for top 10 sectors
     ax.bar(indices - bar_width/2, IntP_top, bar_width, label='Intermediate Inputs (X)')
     ax.bar(indices - bar_width/2, W_top, bar_width, bottom=IntP_top, label='Wages (X)')
     ax.bar(indices - bar_width/2, P_top, bar_width, bottom=IntP_top + W_top, label='Profits (X)')
@@ -2825,7 +2716,7 @@ def create_detailed_sectoral_graphs(results: ModelResults, displayPlots: bool = 
     bar_width = 0.1
     indices = np.arange(len(top_sectors))
     top_sector_notes = [f"Sector {index}: {pc.sectors[index]}" for index in top_sectors]
-    # Plot X decomposition for top 15 sectors
+    # Plot X decomposition for top 10 sectors
     ax.bar(indices - bar_width, IntP_top, bar_width, label='Intermediate Inputs (X)')
     ax.bar(indices - bar_width, W_top, bar_width, bottom=IntP_top, label='Wages (X)')
     ax.bar(indices - bar_width, P_top, bar_width, bottom=IntP_top + W_top, label='Profits (X)')
@@ -2881,7 +2772,7 @@ def create_detailed_sectoral_graphs(results: ModelResults, displayPlots: bool = 
     top_sectors = Y_.nlargest(10).index  # Select the top 10 sectors according to the chosen metric
     time_index = results.sectoral['X'].index  # Time index
 
-    # Loop through the top 5 sectors (according to metric defined here) and create a separate chart for each
+    # Loop through the top 10 sectors (according to metric defined here) and create a separate chart for each
     for sector in top_sectors:
         fig, ax = plt.subplots(figsize=(15, 8))
         ax.set_xticks(df.index[::5])               # ticks at each model step according to years (5-year intervalls)
@@ -2928,7 +2819,7 @@ def create_detailed_sectoral_graphs(results: ModelResults, displayPlots: bool = 
     bar_width = 0.25
     indices = np.arange(len(top_sectors))
     top_sector_notes = [f"Sector {index}: {pc.sectors[index]}" for index in top_sectors]
-    # Plot X decomposition for top 15 sectors
+    # Plot X decomposition for top 10 sectors
     ax.bar(indices - bar_width/2, IntP_top, bar_width, label='Intermediate Inputs (X)')
     ax.bar(indices - bar_width/2, W_top, bar_width, bottom=IntP_top, label='Wages (X)')
     ax.bar(indices - bar_width/2, P_top, bar_width, bottom=IntP_top + W_top, label='Profits (X)')
@@ -3013,7 +2904,6 @@ def create_detailed_sectoral_graphs(results: ModelResults, displayPlots: bool = 
     ax.set_xticks(indices)
     ax.set_xticklabels(sector_numbers, rotation=90)
     ax.legend()
-    # Add sector notes as a legend or text
 
     
     # Plot the different versions of Y in model and data for period 1/calibratioin
@@ -3099,8 +2989,7 @@ def create_detailed_sectoral_graphs(results: ModelResults, displayPlots: bool = 
     return fig, ax
 
 
-# Changes from original:
-# - Using sum over all sectors instead of first sector only
+# Sums over all sectors
 def create_balance_sheet(results: ModelResults, t: int = -1, display: bool = True):
     """Return two pandas dataframes with symbols and values."""
 
@@ -3253,7 +3142,6 @@ def create_transition_matrix(results: pd.DataFrame, c: ModelConfig, t: int = -1,
         IPdisplay(transition_matrix.round(2))
 
     return transition_matrix, transition_matrix_symbols
-# --- Add this helper function (ideally near the top with other imports) ---
 def _safe_pct_change(policy_val, base_val):
     """Calculates (policy - base) / base, handling division by zero."""
     # (policy - base) / base
@@ -3266,8 +3154,6 @@ def _safe_pct_change(policy_val, base_val):
     # Handle cases where both are 0 (which is 0 change, not nan)
     change = np.nan_to_num(change, nan=0.0, posinf=0.0, neginf=0.0)
     return change * 100 # Return as percentage
-
-# --- This is the updated plotting function ---
 
 def plot_scenario_percentage_change(results_base: 'ModelResults', results_policy: 'ModelResults', title_suffix=""):
     """
@@ -3284,13 +3170,13 @@ def plot_scenario_percentage_change(results_base: 'ModelResults', results_policy
         
     years = list(range(2021, 2021 + len(base_macro)))
     
-    # --- 1. Calculate % Change Data for ALL years ---
+    # Calculate % Change Data for ALL years
     
     # Energy Mix
     pct_oil = _safe_pct_change(policy_macro['oil_use_total'], base_macro['oil_use_total'])
     pct_gas = _safe_pct_change(policy_macro['gas_use_total'], base_macro['gas_use_total'])
     pct_elec = _safe_pct_change(policy_macro['electricity_use_total'], base_macro['electricity_use_total'])
-    # NEW: Total Energy
+    # Total Energy
     base_total_energy = base_macro['oil_use_total'] + base_macro['gas_use_total'] + base_macro['electricity_use_total']
     policy_total_energy = policy_macro['oil_use_total'] + policy_macro['gas_use_total'] + policy_macro['electricity_use_total']
     pct_total_energy = _safe_pct_change(policy_total_energy, base_total_energy)
@@ -3299,7 +3185,7 @@ def plot_scenario_percentage_change(results_base: 'ModelResults', results_policy
     pct_emis_oil = _safe_pct_change(policy_macro['oil_emissions_total'], base_macro['oil_emissions_total'])
     pct_emis_gas = _safe_pct_change(policy_macro['gas_emissions_total'], base_macro['gas_emissions_total'])
     pct_emis_elec_indirect = _safe_pct_change(policy_macro['electricity_emissions_total'], base_macro['electricity_emissions_total'])
-    # NEW: Total Emissions (including indirect)
+    # Total Emissions (including indirect)
     base_total_emissions = base_macro['oil_emissions_total'] + base_macro['gas_emissions_total'] + base_macro['electricity_emissions_total']
     policy_total_emissions = policy_macro['oil_emissions_total'] + policy_macro['gas_emissions_total'] + policy_macro['electricity_emissions_total']
     pct_total_emissions = _safe_pct_change(policy_total_emissions, base_total_emissions)
@@ -3308,10 +3194,10 @@ def plot_scenario_percentage_change(results_base: 'ModelResults', results_policy
     pct_ire = _safe_pct_change(policy_macro['I_RE'], base_macro['I_RE'])
     pct_re_gen = _safe_pct_change(policy_macro['renewable_energy_generation'], base_macro['renewable_energy_generation'])
 
-    # NEW: GDP
+    # GDP
     pct_gdp = _safe_pct_change(policy_macro['Y'], base_macro['Y'])
     
-    # --- 2. Filter Data for Sample Years ---
+    # Filter Data for Sample Years
     # Create a DataFrame with all % change data
     pct_data = pd.DataFrame({
         'Year': years,
@@ -3335,31 +3221,30 @@ def plot_scenario_percentage_change(results_base: 'ModelResults', results_policy
     available_sample_years = [year for year in sample_years if year in pct_data.index]
     pct_data_sampled = pct_data.loc[available_sample_years]
     
-    # --- 3. Create Plots (3x1 layout) ---
+    # Create Plots (3x1 layout)
     fig, (ax1, ax2, ax3) = plt.subplots(nrows=3, ncols=1, figsize=(14, 20), sharex=True) # Share x-axis
-    fig.suptitle(f"Policy Impact: % Change ({title_suffix})", fontsize=22, y=1.03) # FONTSIZE
+    fig.suptitle(f"Policy Impact: % Change ({title_suffix})", fontsize=22, y=1.03)
     
-    # --- Plot 1: Energy Mix & GDP % Change (Bar + Scatter) ---
+    # Plot 1: Energy Mix & GDP % Change (Bar + Scatter)
     df_energy = pct_data_sampled[['% Change in Total Energy', '% Change in Oil', '% Change in Gas', '% Change in Electricity']]
     df_energy.plot(
         kind='bar',
         ax=ax1,
         color={'% Change in Total Energy': '#636EFA', '% Change in Oil': 'black', '% Change in Gas': 'orange', '% Change in Electricity': 'blue'}
     )
-    ax1.set_title("Percentage Change in Primary Energy Use and GDP", fontsize=20) # FONTSIZE
-    ax1.set_ylabel("% Change from Baseline (Bars)", fontsize=16) # FONTSIZE
+    ax1.set_title("Percentage Change in Primary Energy Use and GDP", fontsize=20)
+    ax1.set_ylabel("% Change from Baseline (Bars)", fontsize=16)
     ax1.axhline(0, color='grey', linewidth=0.5)
     ax1.grid(True, linestyle=':', alpha=0.7, axis='y')
     
-    # --- Y-AXIS LIMITS FOR ENERGY ---
+    # Y-AXIS LIMITS FOR ENERGY
     ax1.set_ylim(-50, 155)
-    # --- END ---
 
     ax1.set_xlabel('')
-    ax1.tick_params(axis='x', labelrotation=0, labelsize=14) # FONTSIZE
-    ax1.tick_params(axis='y', labelsize=14) # FONTSIZE
+    ax1.tick_params(axis='x', labelrotation=0, labelsize=14)
+    ax1.tick_params(axis='y', labelsize=14)
 
-    # --- Add Secondary Y-Axis for GDP Bubbles ---
+    # Add Secondary Y-Axis for GDP Bubbles
     ax1_twin = ax1.twinx()
     gdp_data = pct_data_sampled['% Change in GDP']
     
@@ -3385,14 +3270,14 @@ def plot_scenario_percentage_change(results_base: 'ModelResults', results_policy
             textcoords="offset points",
             xytext=(0, 15), # 15 points above the bubble center
             ha='center',
-            fontsize=12, # FONTSIZE
+            fontsize=12,
             fontweight='bold',
             color='#AB63FA'
         )
     
     # Set axis properties for the twin axis
-    ax1_twin.set_ylabel("% Change in GDP (Bubbles)", color='#AB63FA', fontsize=16) # FONTSIZE
-    ax1_twin.tick_params(axis='y', labelcolor='#AB63FA', labelsize=14) # FONTSIZE
+    ax1_twin.set_ylabel("% Change in GDP (Bubbles)", color='#AB63FA', fontsize=16)
+    ax1_twin.tick_params(axis='y', labelcolor='#AB63FA', labelsize=14)
     #ax1_twin.yaxis.set_major_formatter(PercentFormatter())
     
     # Set ylim for twin axis to make sure bubbles and labels are visible
@@ -3405,30 +3290,29 @@ def plot_scenario_percentage_change(results_base: 'ModelResults', results_policy
     # Combine legends from both axes
     handles1, labels1 = ax1.get_legend_handles_labels()
     handles2, labels2 = ax1_twin.get_legend_handles_labels()
-    ax1.legend(handles1 + handles2, labels1 + labels2, loc='upper left', fontsize=14) # FONTSIZE
+    ax1.legend(handles1 + handles2, labels1 + labels2, loc='upper left', fontsize=14)
 
-    # --- Plot 2: Emissions % Change (Bar Chart) ---
+    # Plot 2: Emissions % Change (Bar Chart)
     df_emis = pct_data_sampled[['% Change in Total Emissions', '% Change Oil Emissions', '% Change Gas Emissions', '% Change Elec. Emissions']]
     df_emis.plot(
         kind='bar',
         ax=ax2,
         color={'% Change in Total Emissions': '#EF553B', '% Change Oil Emissions': 'black', '% Change Gas Emissions': 'orange', '% Change Elec. Emissions': 'blue'}
     )
-    ax2.set_title("Percentage Change in Total Emissions (Direct + Indirect)", fontsize=20) # FONTSIZE
-    ax2.set_ylabel("% Change from Baseline", fontsize=16) # FONTSIZE
+    ax2.set_title("Percentage Change in Total Emissions (Direct + Indirect)", fontsize=20)
+    ax2.set_ylabel("% Change from Baseline", fontsize=16)
     ax2.axhline(0, color='grey', linewidth=0.5)
     ax2.grid(True, linestyle=':', alpha=0.7, axis='y')
     
-    # --- Y-AXIS LIMITS FOR EMISSIONS ---
+    # Y-AXIS LIMITS FOR EMISSIONS
     ax2.set_ylim(-70, 155)
-    # --- END ---
     
     ax2.set_xlabel('')
-    ax2.legend(fontsize=14) # FONTSIZE
-    ax2.tick_params(axis='x', labelrotation=0, labelsize=14) # FONTSIZE
-    ax2.tick_params(axis='y', labelsize=14) # FONTSIZE
+    ax2.legend(fontsize=14)
+    ax2.tick_params(axis='x', labelrotation=0, labelsize=14)
+    ax2.tick_params(axis='y', labelsize=14)
 
-    # --- Plot 3: RE Investment & Generation % Change (Bar Chart) ---
+    # Plot 3: RE Investment & Generation % Change (Bar Chart)
     # This is now the bottom plot, so it gets the x-axis label
     df_re = pct_data_sampled[['% Change RE Investment', '% Change RE Generation']]
     df_re.plot(
@@ -3436,21 +3320,21 @@ def plot_scenario_percentage_change(results_base: 'ModelResults', results_policy
         ax=ax3,
         color={'% Change RE Investment': '#006400', '% Change RE Generation': '#2ca02c'} # Dark/Light Green
     )
-    ax3.set_title("Percentage Change in Renewable Energy", fontsize=20) # FONTSIZE
-    ax3.set_xlabel("Year", fontsize=16) # FONTSIZE
-    ax3.set_ylabel("% Change from Baseline", fontsize=16) # FONTSIZE
+    ax3.set_title("Percentage Change in Renewable Energy", fontsize=20)
+    ax3.set_xlabel("Year", fontsize=16)
+    ax3.set_ylabel("% Change from Baseline", fontsize=16)
     ax3.axhline(0, color='grey', linewidth=0.5)
     ax3.grid(True, linestyle=':', alpha=0.7, axis='y')
-    ax3.tick_params(axis='x', rotation=0, labelsize=14) # FONTSIZE
-    ax3.tick_params(axis='y', labelsize=14) # FONTSIZE
-    ax3.legend(fontsize=14) # FONTSIZE
+    ax3.tick_params(axis='x', rotation=0, labelsize=14)
+    ax3.tick_params(axis='y', labelsize=14)
+    ax3.legend(fontsize=14)
     
     plt.tight_layout(rect=[0, 0.03, 1, 0.96])
     plt.show()
     
 def plot_efficiency_savings(results: 'ModelResults'):
     """
-    Plots only the Annual Value of Avoided Energy Bills (The Benefit).
+    Plots only the Annual Value of Avoided Energy Bills.
     """
     import matplotlib.pyplot as plt
     import pandas as pd
@@ -3463,9 +3347,8 @@ def plot_efficiency_savings(results: 'ModelResults'):
         print("NOTE: Efficiency gains disabled. No plots.")
         return
 
-    # --- 1. Setup Data ---
-    # Check for necessary keys
-    # We look for energy reduction factors to determine timeline
+    # Setup Data
+    # Timeline from the energy reduction factors
     if 'energy_reduction_factor' in results.sectoral:
         num_steps = len(results.sectoral['energy_reduction_factor'])
     elif 'energy_reduction_factor_' in results.sectoral:
@@ -3488,15 +3371,13 @@ def plot_efficiency_savings(results: 'ModelResults'):
     
     total_savings_bn = []
     
-    # --- 2. Calculate Annual Savings ---
+    # Calculate Annual Savings
     for t_idx, year in enumerate(years):
-        # robustly get X
         if 'X' in results.sectoral:
              X_vals = results.sectoral['X'].iloc[t_idx].values
         else:
              X_vals = results.sectoral['X_'].iloc[t_idx].values 
 
-        # robustly get Reduction Factor
         if 'energy_reduction_factor' in results.sectoral:
             Red_vals = results.sectoral['energy_reduction_factor'].iloc[t_idx].values
         elif 'energy_reduction_factor_' in results.sectoral:
@@ -3512,7 +3393,7 @@ def plot_efficiency_savings(results: 'ModelResults'):
 
     df_savings = pd.DataFrame({'Total Value of Energy Saved': total_savings_bn}, index=years)
 
-    # --- 3. Plotting ---
+    # Plotting
     fig, ax = plt.subplots(figsize=(12, 7))
     
     # Area plot for visual weight
@@ -3540,7 +3421,7 @@ import numpy as np
 
 def plot_net_zero_emissions(results: 'ModelResults'):
     """
-    Visualizes the path to Net Zero with the new Electrification Wedge.
+    Visualizes the path to Net Zero, including the Electrification Wedge.
     """
     import matplotlib.pyplot as plt
     import pandas as pd
@@ -3555,7 +3436,7 @@ def plot_net_zero_emissions(results: 'ModelResults'):
 
     years = list(range(2021, 2021 + len(results.macro)))
     
-    # --- 1. Data Extraction ---
+    # Data Extraction
     gross_emissions = results.macro['emissions_gross_total'].values
     net_emissions = results.macro['emissions_net_total'].values
     
@@ -3563,7 +3444,7 @@ def plot_net_zero_emissions(results: 'ModelResults'):
     ccs_flow = results.macro['flow_remove_ccs'].values
     nature_flow = results.macro['flow_remove_nature'].values
     
-    # --- 2. Calculate Avoided Emissions ---
+    # Calculate Avoided Emissions
     
     # A. Hydrogen
     if 'hydrogen_domestic_use' in results.macro:
@@ -3612,17 +3493,17 @@ def plot_net_zero_emissions(results: 'ModelResults'):
         except Exception as e:
             print(f"Plot Warning: Electrification calc error: {e}")
 
-    # --- 3. Stack Data ---
+    # Stack Data
     df_emissions = pd.DataFrame({
         'Net Remaining': net_emissions,
         'Nature (SGI)': nature_flow,
         'CCS': ccs_flow,
         'CCU': ccu_flow,
         'Hydrogen': abated_h2,
-        'Electrification': abated_elec_net  # <--- New Wedge
+        'Electrification': abated_elec_net
     }, index=years)
     
-    # --- 4. Plot ---
+    # Plot
     fig, ax = plt.subplots(figsize=(12, 7))
     colors_ems = ['#555555', '#2ca02c', '#1f77b4', '#9467bd', '#e377c2', '#ff7f0e']
     
@@ -3644,7 +3525,7 @@ def plot_net_zero_emissions(results: 'ModelResults'):
 def plot_net_zero_investment(results: 'ModelResults'):
     """
     Shows annual investment in Net Zero technologies.
-    Updated to include Industrial Electrification costs.
+    Includes Industrial Electrification costs.
     """
     import matplotlib.pyplot as plt
     import pandas as pd
@@ -3657,7 +3538,7 @@ def plot_net_zero_investment(results: 'ModelResults'):
     years = list(range(2021, 2021 + len(results.macro)))
     TO_BILLION = 1_000_000
     
-    # --- Data Extraction ---
+    # Data Extraction
     # Sectoral Sums
     inv_ccu = results.sectoral['I_netzero_ccu'].sum(axis=1).values / TO_BILLION
     inv_ccs = results.sectoral['I_netzero_ccs'].sum(axis=1).values / TO_BILLION
@@ -3669,12 +3550,12 @@ def plot_net_zero_investment(results: 'ModelResults'):
     else:
         inv_elec = np.zeros_like(inv_ccu)
     
-    # --- Plotting ---
+    # Plotting
     df_investment = pd.DataFrame({
         'Nature (SGI)': inv_nature,
         'CCS Infrastructure': inv_ccs,
         'CCU / Recycling': inv_ccu,
-        'Ind. Electrification': inv_elec # <--- New Bar
+        'Ind. Electrification': inv_elec
     }, index=years)
     
     # Calculate % of GDP
@@ -3709,12 +3590,12 @@ def plot_carbon_market_cost(results: 'ModelResults'):
     
     p = results.config.p
     
-    # --- Safety Check 1: Is the policy on? ---
+    # Skip if the net-zero policy is off
     if not p.net_emission_reduction_green_investments_exports_transformation:
         print("NOTE: Net Zero Target is FALSE. Skipping plot.")
         return
         
-    # --- Safety Check 2: Is the Market Enabled? ---
+    # Skip if the carbon market is disabled
     if not hasattr(p, 'enable_carbon_market') or not p.enable_carbon_market:
         print("NOTE: 'enable_carbon_market' is FALSE. No trading occurring.")
         return
@@ -3722,34 +3603,30 @@ def plot_carbon_market_cost(results: 'ModelResults'):
     years = list(range(2021, 2021 + len(results.macro)))
     TO_BILLION = 1_000_000
     
-    # --- Data Extraction with Diagnostics ---
+    # Data Extraction
     try:
         # 1. COST (Buyers)
-        # Ensure variable exists. If sums are 0, it means Net Emissions were <= 0.
+        # Zero cost means that net emissions were <= 0.
         cost_credits = results.sectoral['I_carbon_credits'].sum(axis=1).values / TO_BILLION
         
         # 2. REVENUE (Sellers)
-        # This key often causes errors if model_classes.py wasn't updated.
         if 'I_carbon_credit_revenue' in results.sectoral:
             rev_credits = results.sectoral['I_carbon_credit_revenue'].sum(axis=1).values / TO_BILLION
         else:
-            print("WARNING: 'I_carbon_credit_revenue' missing from results. Did you add it to ModelVariables?")
+            print("WARNING: 'I_carbon_credit_revenue' missing from results.")
             rev_credits = np.zeros_like(cost_credits)
 
     except KeyError as e:
-        print(f"Critical Data Error: {e}")
+        print(f"Missing data: {e}")
         return
 
-    # --- Diagnostic Print ---
+    # Report an empty market
     total_market_vol = np.sum(cost_credits)
     if total_market_vol == 0:
-        print("!!! ALERT: Market Volume is ZERO. !!!")
-        print("Reason: 'Net Emissions' reached 0 physically, so no 'Hard-to-Abate' gap remained.")
-        print("Fix: Ensure the 'Hard-to-Abate' logic (scaling down physical removal) is active in model.py")
-        # Return to avoid plotting empty axes, or continue to show empty plot as proof
+        print("Market volume is zero: net emissions reached 0 physically, so no hard-to-abate gap remained.")
         # return
     
-    # --- Plotting ---
+    # Plotting
     fig, ax = plt.subplots(figsize=(12, 7))
     
     # Plot Revenue (Positive Green Bars)
@@ -3806,37 +3683,34 @@ def plot_net_zero_balance_check(results: 'ModelResults'):
 
     years = list(range(2021, 2021 + len(results.macro)))
     
-    # --- 1. DATA RECONSTRUCTION ---
-    # We reconstruct the logic to show the exact balance
-    
-    # A. The Problem: Residual Emissions (After CCS/Nature, but before Market)
-    # In your model, 'emissions_net_total' is currently the residual before market offset
+    # DATA RECONSTRUCTION
+    # A. Residual Emissions (after CCS/Nature, before the market)
+    # 'emissions_net_total' is the residual before market offsets
     residual_emissions = results.macro['emissions_net_total'].values
     
-    # B. The Constraint: Market Liquidity Cap
+    # B. Market Liquidity Cap
     liquidity_cap = p.carbon_market_liquidity
     
-    # C. The Solution: Credits Purchased
+    # C. Credits Purchased
     # Logic: Buy enough to cover residual, but capped by liquidity
     credits_purchased = np.minimum(residual_emissions, liquidity_cap)
     
-    # D. The Result: Final Net Position
+    # D. Final Net Position
     final_net_position = residual_emissions - credits_purchased
 
-    # --- 2. PLOTTING ---
+    # PLOTTING
     fig, ax = plt.subplots(figsize=(12, 7))
     
-    # Plot 1: The Liability (Positive Bar)
+    # Plot 1: Residual emissions (positive bar)
     ax.bar(years, residual_emissions, color='grey', alpha=0.6, label='Residual "Hard-to-Abate" Emissions')
     
-    # Plot 2: The Offset (Negative Bar)
+    # Plot 2: Offsets (negative bar)
     ax.bar(years, -credits_purchased, color='#27AE60', alpha=0.8, label='Carbon Credits Purchased (Offset)')
     
-    # Plot 3: The Net Result (Line)
-    # We make this line thicker and colorful to show the success/failure
+    # Plot 3: Net position (line)
     ax.plot(years, final_net_position, color='black', linewidth=3, marker='o', markersize=5, label='Final Net Position')
     
-    # --- 3. FORMATTING ---
+    # FORMATTING
     ax.set_title("The Net Zero Equation: Balancing Residual Emissions with Market Offsets", fontsize=16, fontweight='bold')
     ax.set_ylabel("Emissions Balance (MtCO2e)", fontsize=12)
     ax.set_xlabel("Year", fontsize=12)
@@ -3846,9 +3720,8 @@ def plot_net_zero_balance_check(results: 'ModelResults'):
     ax.axhspan(-5, 5, color='green', alpha=0.1)
     ax.text(years[2], 2, "Net Zero Target Zone", color='green', fontweight='bold', fontsize=10)
     
-    # Check for Liquidity Crunch
+    # Annotate a remaining gap (liquidity shortage)
     if final_net_position[-1] > 1.0:
-        # If line is above 0, we failed
         fail_gap = final_net_position[-1]
         ax.annotate(f'Liquidity Shortage!\nGap: {fail_gap:.1f} Mt',
                     xy=(years[-1], fail_gap),
@@ -3877,13 +3750,13 @@ def plot_nonoil_gdp_comparison(res_base, res_nz):
     pc = res_base.config.pc
     years = list(range(2021, 2021 + len(res_base.macro)))
     
-    # --- 1. Identify Non-Oil Sectors (ROBUST METHOD) ---
+    # Identify Non-Oil Sectors
     oil_names = [
         'Extraction of crude petroleum and natural gas',
         'Manufacture of coke and refined petroleum products'
     ]
     
-    # Strict string matching
+    # Substring match on sector names
     oil_indices = []
     for idx, s in enumerate(pc.sectors):
         if any(name in s for name in oil_names):
@@ -3893,14 +3766,14 @@ def plot_nonoil_gdp_comparison(res_base, res_nz):
     is_nonoil = np.ones(pc.S, dtype=bool)
     is_nonoil[oil_indices] = False
     
-    # --- 2. Helper Function ---
+    # Helper Function
     def get_nonoil_gdp(results):
-        # We use Y_ (Final Demand) as the GDP proxy in this Demand-Led model
+        # Y_ (Final Demand) is the GDP proxy in this demand-led model
         Y_matrix = results.sectoral['Y']
         # Sum only non-oil columns
         return Y_matrix.loc[:, is_nonoil].sum(axis=1)
 
-    # --- 3. Calculate Vectors ---
+    # Calculate Vectors
     gdp_base = get_nonoil_gdp(res_base).values / 1e9
     gdp_nz = get_nonoil_gdp(res_nz).values / 1e9
     
@@ -3912,7 +3785,7 @@ def plot_nonoil_gdp_comparison(res_base, res_nz):
     years_gr = years[1:]
     gdp_diff = gdp_nz - gdp_base
 
-    # --- 4. Plotting ---
+    # Plotting
     fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, figsize=(12, 12))
     fig.suptitle("Impact of Net Zero Strategy on Non-Oil Economy", fontsize=18, fontweight='bold')
 
@@ -3926,7 +3799,7 @@ def plot_nonoil_gdp_comparison(res_base, res_nz):
     ax1.legend()
     ax1.grid(True, alpha=0.4)
 
-    # Plot 2: The Dividend (Difference)
+    # Plot 2: Difference to the baseline
     colors = ['#2ca02c' if x >= 0 else '#d62728' for x in gdp_diff]
     ax2.bar(years, gdp_diff, color=colors, alpha=0.8)
     
@@ -3941,7 +3814,7 @@ def plot_nonoil_gdp_comparison(res_base, res_nz):
 
 def plot_total_gdp_impact(res_base, res_nz):
 
-    # --- 1. Setup Data ---
+    # Setup Data
     years = list(range(2021, 2021 + len(res_base.macro)))
     TO_BILLION = 1_000_000_000 # Divide by 10^9
     
@@ -3949,18 +3822,18 @@ def plot_total_gdp_impact(res_base, res_nz):
     gdp_base = res_base.macro['Y'].values / TO_BILLION
     gdp_nz = res_nz.macro['Y'].values / TO_BILLION
     
-    # Calculate the Change (The Dividend)
+    # Difference to the baseline
     # Positive = Net Zero is higher
     gdp_diff = gdp_nz - gdp_base
     
     # Calculate Cumulative Difference (Total wealth added over the period)
     total_added_wealth = np.sum(gdp_diff)
 
-    # --- 2. Plotting ---
+    # Plotting
     fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, figsize=(12, 12), sharex=True)
     fig.suptitle("Macroeconomic Impact: Total GDP Comparison", fontsize=18, fontweight='bold')
 
-    # --- TOP PLOT: GDP Levels ---
+    # TOP PLOT: GDP Levels
     ax1.plot(years, gdp_base, color='grey', linestyle='--', linewidth=2, label='Baseline (No Net Zero)')
     ax1.plot(years, gdp_nz, color='#1f77b4', linewidth=3, marker='o', label='Net Zero Scenario')
     
@@ -3978,7 +3851,7 @@ def plot_total_gdp_impact(res_base, res_nz):
     # Annotate final value
     ax1.text(years[-1], gdp_nz[-1], f"{gdp_nz[-1]:.0f} Bn", color='#1f77b4', fontweight='bold', ha='left')
 
-    # --- BOTTOM PLOT: The Change (Difference) ---
+    # BOTTOM PLOT: The Change (Difference)
     # Green bars = Gain, Red bars = Loss
     colors = ['#2ca02c' if x >= 0 else '#d62728' for x in gdp_diff]
     
@@ -4018,23 +3891,22 @@ def print_oil_sector_mapping(results):
         elif "Crop" in sector_name or "animal" in sector_name or "Fishing" in sector_name:
             cat = "Agriculture"
         else:
-            cat = "Industries"  # <--- This is what you asked for
+            cat = "Industries"
             
         print(f"[{cat}] -> {sector_name}")
 
-# Run it
 def plot_oil_sector_mapping_visual(results: 'ModelResults'):
     import plotly.graph_objects as go
     
     pc = results.config.pc
     p = results.config.p
     
-    # --- 1. GET SECTORS ---
-    # We only care about the sectors flagged for reduction
+    # GET SECTORS
+    # Sectors flagged for oil reduction
     target_indices = list(pc.oil_reduction_sectors_idx)
     sector_names = [pc.sectors[i] for i in target_indices]
     
-    # --- 2. DEFINE MAPPING LOGIC ---
+    # DEFINE MAPPING LOGIC
     categories = ["Power & Desalination", "Agriculture", "Industries"]
     
     # Lists for Plotly
@@ -4049,7 +3921,7 @@ def plot_oil_sector_mapping_visual(results: 'ModelResults'):
         "Industries": "#d62728"            # Red
     }
 
-    # --- 3. ASSIGN CATEGORIES ---
+    # ASSIGN CATEGORIES
     for i, sector in enumerate(sector_names):
         
         # A. Default Logic (Keyword based)
@@ -4060,9 +3932,7 @@ def plot_oil_sector_mapping_visual(results: 'ModelResults'):
         else:
             cat = "Industries" # Default bucket
 
-        # B. Manual overrides: correct any mis-mapped sector here.
-        
-        # --- BUILD LINKS ---
+        # BUILD LINKS
         src_idx = categories.index(cat)
         tgt_idx = len(categories) + i # Offset by 3 categories
         
@@ -4071,7 +3941,7 @@ def plot_oil_sector_mapping_visual(results: 'ModelResults'):
         # Make link semi-transparent version of category color
         colors.append(cat_colors[cat].replace(")", ", 0.4)").replace("rgb", "rgba"))
 
-    # --- 4. CREATE PLOT ---
+    # CREATE PLOT
     # Create labels list: [Cats] + [Sectors]
     all_labels = categories + sector_names
     
@@ -4108,7 +3978,7 @@ def plot_oil_sector_mapping_visual(results: 'ModelResults'):
 import plotly.graph_objects as go
 
 def plot_gcam_to_ken_sankey(results):
-    # --- 1. DEFINE GCAM SECTORS ---
+    # DEFINE GCAM SECTORS
     gcam_sectors = [
         "N fertilizer", "agricultural energy use", "alumina", "aluminum", "cement",
         "chemical energy use", "chemical feedstocks", "comm cooling", "comm others",
@@ -4122,7 +3992,7 @@ def plot_gcam_to_ken_sankey(results):
         "trn_pass_road", "trn_pass_road_LDV", "trn_pass_road_LDV_4W", "trn_shipping_intl"
     ]
 
-    # --- 2. DEFINE UPDATED MAPPING (BASED ON YOUR ISIC/IOT LOGIC) ---
+    # GCAM-to-KEN sector mapping (ISIC/IOT based)
     mapping = {
         "N fertilizer": ["Manufacture of chemicals and chemical products"],
         "agricultural energy use": ["Crop and animal production, hunting and related service activities"],
@@ -4162,7 +4032,7 @@ def plot_gcam_to_ken_sankey(results):
         "trn_shipping_intl": ["Water transport"]
     }
 
-    # --- 3. BUILD NODES AND LINKS ---
+    # BUILD NODES AND LINKS
     ken_sectors_in_map = sorted(list(set([item for sublist in mapping.values() for item in sublist])))
     all_labels = gcam_sectors + ken_sectors_in_map
     
@@ -4179,14 +4049,14 @@ def plot_gcam_to_ken_sankey(results):
                 targets.append(len(gcam_sectors) + ken_sectors_in_map.index(k_sec))
                 values.append(weight)
 
-    # --- 4. CREATE PLOT ---
+    # CREATE PLOT
     fig = go.Figure(data=[go.Sankey(
         node=dict(
             pad=10,
             thickness=15,
             line=dict(color="black", width=0.5),
             label=all_labels,
-            color="#2E4053"  # Professional dark slate
+            color="#2E4053"  # dark slate
         ),
         link=dict(
             source=sources,
@@ -4199,20 +4069,19 @@ def plot_gcam_to_ken_sankey(results):
     fig.update_layout(
         title_text="<b>Data Alignment: GCAM-KSA Sectors to KEN Model Sectors</b>",
         font_size=11,
-        height=1400, # Increased height to ensure all labels are readable
+        height=1400, # height chosen so that all labels are readable
         width=1200
     )
 
     fig.show()
 
-# --- Run ---
 import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
 
 def plot_sfc_money_circulation(results: 'ModelResults'):
     """
-    Ultra-Detailed Sankey Diagram showing the SFC Money Circulation.
+    Detailed Sankey Diagram of the SFC money circulation.
     
     LEVELS:
     1. Sources: Govt Oil Revenue, Private Equity (Chemicals, Utilities, Manufacturing).
@@ -4233,7 +4102,7 @@ def plot_sfc_money_circulation(results: 'ModelResults'):
     model_years = list(range(2021, 2021 + len(results.macro)))
     TO_BILLION = 1_000_000
 
-    # --- Node Colors (Distinct Palette) ---
+    # Node Colors (Distinct Palette)
     c_gov = "rgba(31, 119, 180, 0.8)"    # Blue
     c_chem = "rgba(148, 103, 189, 0.8)"  # Purple
     c_util = "rgba(188, 189, 34, 0.8)"   # Olive
@@ -4252,9 +4121,7 @@ def plot_sfc_money_circulation(results: 'ModelResults'):
         if year not in model_years: continue
         t_idx = model_years.index(year)
         
-        # ======================================================================
-        # 1. EXTRACT DATA
-        # ======================================================================
+        # EXTRACT DATA
         inv_h2 = results.macro.get('I_hydrogen', pd.Series(0)).iloc[t_idx] / TO_BILLION
         inv_batt = results.macro.get('I_storage', pd.Series(0)).iloc[t_idx] / TO_BILLION
         inv_re = results.macro.get('I_RE', pd.Series(0)).iloc[t_idx] / TO_BILLION
@@ -4266,9 +4133,7 @@ def plot_sfc_money_circulation(results: 'ModelResults'):
         total_inv = inv_h2 + inv_batt + inv_re + inv_ccs + inv_nature + inv_elec + inv_effic
         if total_inv < 0.1: continue
 
-        # ======================================================================
-        # 2. LOCALIZATION & SHARES
-        # ======================================================================
+        # LOCALIZATION & SHARES
         loc_h2 = min(0.7, 0.3 + (0.015 * (year - 2021)))
         loc_re = min(0.8, 0.4 + (0.02 * (year - 2021)))
         
@@ -4277,9 +4142,7 @@ def plot_sfc_money_circulation(results: 'ModelResults'):
         else:
              loc_batt = 0.0 if year <= 2030 else min(1.0, (year - 2030) / 20.0)
 
-        # ======================================================================
-        # 3. NODE DEFINITIONS
-        # ======================================================================
+        # NODE DEFINITIONS
         # Sources (0-3)
         # Projects (4-10)
         # Recipients (11-18)
@@ -4314,10 +4177,8 @@ def plot_sfc_money_circulation(results: 'ModelResults'):
 
         source, target, value = [], [], []
 
-        # ======================================================================
-        # 4. FLOWS: SOURCES -> PROJECTS
-        # ======================================================================
-        # 1. Hydrogen (80% Gov, 20% Chem Equity)
+        # FLOWS: SOURCES -> PROJECTS
+        # Hydrogen (80% Gov, 20% Chem Equity)
         source.extend([0, 1]); target.extend([4, 4]); value.extend([inv_h2*0.8, inv_h2*0.2])
         
         # 2. Batteries (50% Gov, 50% Util Equity)
@@ -4338,9 +4199,7 @@ def plot_sfc_money_circulation(results: 'ModelResults'):
         # 7. Efficiency (100% Mfg Equity - Self funded)
         source.append(3); target.append(10); value.append(inv_effic)
 
-        # ======================================================================
-        # 5. FLOWS: PROJECTS -> RECIPIENT SECTORS
-        # ======================================================================
+        # FLOWS: PROJECTS -> RECIPIENT SECTORS
         
         def add_detailed_flow(proj_node, amt, loc, split_dict):
             """
@@ -4391,9 +4250,7 @@ def plot_sfc_money_circulation(results: 'ModelResults'):
         # 40% Spec Const (Insulation), 30% Machinery, 20% Elec, 10% Eng Svcs
         add_detailed_flow(10, inv_effic, 0.6, {12: 0.4, 13: 0.3, 14: 0.2, 16: 0.1})
 
-        # ======================================================================
-        # 6. PLOT
-        # ======================================================================
+        # PLOT
         fig = go.Figure(data=[go.Sankey(
             node=dict(
                 pad=15, thickness=20,
@@ -4431,7 +4288,7 @@ def plot_cumulative_transition_sankey(results: 'ModelResults'):
     TO_BILLION = 1_000_000
     
     # Initialize Cumulative Counters
-    # We track where the money ended up over 35 years
+    # Where the money ended up over 35 years
     cum_h2_const = 0; cum_h2_mach = 0; cum_h2_imp = 0
     cum_batt_elec = 0; cum_batt_imp = 0
     cum_re_const = 0; cum_re_elec = 0; cum_re_mach = 0; cum_re_imp = 0
@@ -4445,7 +4302,7 @@ def plot_cumulative_transition_sankey(results: 'ModelResults'):
         if year not in model_years: continue
         t_idx = model_years.index(year)
         
-        # --- 1. Extract Annual Investment ---
+        # Extract Annual Investment
         inv_h2 = results.macro.get('I_hydrogen', pd.Series(0)).iloc[t_idx] / TO_BILLION
         inv_batt = results.macro.get('I_storage', pd.Series(0)).iloc[t_idx] / TO_BILLION
         inv_re = results.macro.get('I_RE', pd.Series(0)).iloc[t_idx] / TO_BILLION
@@ -4454,13 +4311,13 @@ def plot_cumulative_transition_sankey(results: 'ModelResults'):
         
         total_oil_funding += (inv_h2 + inv_batt + inv_re + inv_ccs + inv_nature)
 
-        # --- 2. Determine Dynamic Localization Rates (The "Industrial Policy" Curve) ---
+        # Determine Dynamic Localization Rates (The "Industrial Policy" Curve)
         # As years pass, leakage decreases and local capture increases
         
         # Hydrogen: Ramps 30% -> 70% local
         h2_loc = min(0.7, 0.3 + (0.015 * (year - 2021)))
         
-        # Batteries: Ramps 0% -> 100% (Based on your model logic)
+        # Batteries: local share ramps 0% -> 100% (storage_local_share in the model)
         if 'storage_local_share' in results.macro:
              batt_loc = results.macro['storage_local_share'].iloc[t_idx]
         else:
@@ -4475,7 +4332,7 @@ def plot_cumulative_transition_sankey(results: 'ModelResults'):
         # Nature: High local content (Labor) ~90%
         nat_loc = 0.9
 
-        # --- 3. Accumulate Flows to Sectors ---
+        # Accumulate Flows to Sectors
         
         # Hydrogen
         cum_h2_imp += inv_h2 * (1 - h2_loc)
@@ -4501,7 +4358,7 @@ def plot_cumulative_transition_sankey(results: 'ModelResults'):
         cum_nat_imp += inv_nature * (1 - nat_loc)
         cum_nat_serv += inv_nature * nat_loc
 
-    # --- 4. Build Sankey Data ---
+    # Build Sankey Data
     
     # Indices:
     # 0: Total Oil Surplus
@@ -4607,7 +4464,7 @@ def plot_cumulative_transition_sankey(results: 'ModelResults'):
 def plot_net_zero_sfc_mechanism(results: 'ModelResults'):
     """
     Sankey Diagram showing the flow of funds from Policy -> Sectors -> Income.
-    Updated to include Electrification Investment flows.
+    Includes Electrification Investment flows.
     """
     import plotly.graph_objects as go
     import pandas as pd
@@ -4621,7 +4478,7 @@ def plot_net_zero_sfc_mechanism(results: 'ModelResults'):
     last_step = -1
     TO_BILLION = 1_000_000
     
-    # --- 1. Investment Sources ---
+    # Investment Sources
     inv_ccu = results.sectoral['I_netzero_ccu'].iloc[last_step].sum() / TO_BILLION
     inv_ccs = results.sectoral['I_netzero_ccs'].iloc[last_step].sum() / TO_BILLION
     inv_nature = results.sectoral['I_netzero_nature'].iloc[last_step].sum() / TO_BILLION
@@ -4631,13 +4488,13 @@ def plot_net_zero_sfc_mechanism(results: 'ModelResults'):
     if 'I_electrification_total' in results.macro:
         inv_elec = results.macro['I_electrification_total'].iloc[last_step] / TO_BILLION
 
-    # --- 2. Define Nodes ---
+    # Define Nodes
     labels = [
         "<b>Net Zero Strategy</b>",    # 0
         "Chemicals (CCU)",             # 1
         "Oil/Mining (CCS)",            # 2
         "Agri (Nature)",               # 3
-        "Industry (Retrofits)",        # 4 <--- New Node
+        "Industry (Retrofits)",        # 4
         "<b>Real Economy</b>",         # 5
         "Construction Sector",         # 6
         "Manufacturing Sector",        # 7
@@ -4648,7 +4505,7 @@ def plot_net_zero_sfc_mechanism(results: 'ModelResults'):
     c_inv = "rgba(31, 119, 180, 0.6)"
     c_inc = "rgba(44, 160, 44, 0.6)"
 
-    # --- 3. Flow Logic ---
+    # Flow Logic
     
     # A. Strategy -> Specific Investment types
     source += [0, 0, 0, 0]
@@ -4686,7 +4543,7 @@ def plot_net_zero_sfc_mechanism(results: 'ModelResults'):
     value += [val_const, val_manu, val_serv]
     color += [c_inc] * 3
 
-    # --- 4. Plot ---
+    # Plot
     fig = go.Figure(data=[go.Sankey(
         node=dict(pad=15, thickness=20, line=dict(color="black", width=0.5), label=labels, color="lightgrey"),
         link=dict(source=source, target=target, value=value, color=color)
@@ -4705,18 +4562,9 @@ def plot_cumulative_netzero_finance(results: 'ModelResults', T_steps=None, title
     import numpy as np
     
     # Helper to get macro or sectoral sum
-    def get_val(key):
-        if hasattr(results.macro, key): # Check macro first
-             return results.macro[key].sum()
-        elif key in results.macro: # Check dataframe column
-             return results.macro[key].sum()
-        elif hasattr(results, key): # Check ModelResults attr
-             val = getattr(results, key)
-             return np.sum(val) if val is not None else 0
-        return 0.0
 
     # 1. Get Sectoral Sums (using proper names)
-    # Note: These names must match what is in ModelVariables
+    # Names as in ModelVariables
     tot_ccu = np.sum(results.sectoral['I_netzero_ccu'].values)
     tot_ccs = np.sum(results.sectoral['I_netzero_ccs'].values)
     tot_nature = np.sum(results.sectoral['I_netzero_nature'].values)
@@ -4774,8 +4622,8 @@ def plot_oil_and_gas_switching_intuitive(results: 'ModelResults'):
     years = list(range(2021, 2021 + len(results.macro)))
     TO_BILLION = 1_000_000
 
-    # --- ADJUSTMENT FACTOR ---
-    # Gas is 70% the price of Oil per GJ (User can adjust this if needed)
+    # ADJUSTMENT FACTOR
+    # Assumption: gas costs 70% of the oil price per GJ
     GAS_PRICE_DISCOUNT = 0.7
 
     # 1. Get Data
@@ -4792,7 +4640,7 @@ def plot_oil_and_gas_switching_intuitive(results: 'ModelResults'):
     
     # 2. Calculate Financial & Emission Impacts
     
-    # --- Price Setup ---
+    # Price Setup
     idx_mining = pc.sectors.index('Extraction of crude petroleum and natural gas')
     total_mining_revenue = pc.X_[idx_mining]
     total_mining_energy_gj = np.sum((pc.oil_intensities_ + pc.gas_intensities_) * pc.X_)
@@ -4836,7 +4684,7 @@ def plot_oil_and_gas_switching_intuitive(results: 'ModelResults'):
     color_net = 'black'
     color_emissions = '#1f77b4' # Standard Blue
 
-    # --- Primary Axis (Left): Financials ---
+    # Primary Axis (Left): Financials
     # Negative savings for visual flow (below zero), Costs above zero
     bar1 = ax.bar(years, -savings_oil_bn, color=color_savings, alpha=0.8, label='Savings (Avoided Oil Bill)')
     bar2 = ax.bar(years, costs_gas_bn, color=color_costs, alpha=0.8, label='Cost (New Gas Bill)')
@@ -4847,7 +4695,7 @@ def plot_oil_and_gas_switching_intuitive(results: 'ModelResults'):
     ax.axhline(0, color='black', linewidth=0.8)
     ax.grid(axis='y', alpha=0.5)
 
-    # --- Secondary Axis (Right): Emissions ---
+    # Secondary Axis (Right): Emissions
     ax_twin = ax.twinx()
     
     # Normalize bubble sizes relative to the maximum value for readability
@@ -4866,7 +4714,7 @@ def plot_oil_and_gas_switching_intuitive(results: 'ModelResults'):
     # Ensure y-axis starts at 0 and has headroom
     ax_twin.set_ylim(bottom=0, top=max_em * 1.35)
 
-    # --- Title & Annotations ---
+    # Title & Annotations
     ax.set_title(f"Financial Impact & Environmental Benefit\n(Targeted Liquid Displacement Program)", fontsize=16, fontweight='bold')
 
     # Emission Factor Info Box
@@ -4974,7 +4822,7 @@ def plot_oil_and_gas_switching_intuitive_no_legend(results: 'ModelResults'):
     color_net       = 'black'
     color_emissions = '#1f77b4'
 
-    # --- Left axis: Bars + Net line ---
+    # Left axis: Bars + Net line
     ax.bar(years, -savings_oil_bn, color=color_savings, alpha=0.8)
     ax.bar(years,  costs_gas_bn,   color=color_costs,   alpha=0.8)
     ax.plot(years, net_impact_bn,  color=color_net, linewidth=2, marker='_', markersize=10)
@@ -4985,7 +4833,7 @@ def plot_oil_and_gas_switching_intuitive_no_legend(results: 'ModelResults'):
     ax.axhline(0, color='black', linewidth=0.8)
     ax.grid(axis='y', alpha=0.5)
 
-    # --- Right axis: Emission bubbles + dashed line ---
+    # Right axis: Emission bubbles + dashed line
     ax_twin = ax.twinx()
 
     max_em       = np.max(net_emission_reduction_mt) if np.max(net_emission_reduction_mt) > 0 else 1.0
@@ -5020,10 +4868,10 @@ def plot_net_zero_balance_sheet(results: 'ModelResults'):
     years = list(range(2021, 2021 + len(results.macro)))
     
     # 1. Get Data
-    residual_emissions = results.macro['emissions_net_total'].values # The Grey Wedge
+    residual_emissions = results.macro['emissions_net_total'].values # grey area
     
     # Calculate Credits Purchased (Limited by Liquidity)
-    # We recalculate the curve here for plotting
+    # Curve recalculated for plotting
     start_year_idx = 4 # 2025
     liquidity_curve = []
     start_vol = p.carbon_market_liquidity
@@ -5095,7 +4943,7 @@ import matplotlib.pyplot as plt
 
 def plot_energy_scenarios(exp_reports, start_year=2021):
     """
-    Generates high-quality energy scenario plots with sub-labels (a, b, c...)
+    Generates energy scenario plots with sub-labels (a, b, c...)
     Includes non-overlapping value annotations and % of GDP.
     Units are only displayed on plots (a) and (g) with the same font size as values.
     """
@@ -5126,7 +4974,7 @@ def plot_energy_scenarios(exp_reports, start_year=2021):
     ANNOTATION_FONT_SIZE = 18
     SUB_LABEL_SIZE = 18
 
-    # --- Helper: Overlap Resolution for Labels ---
+    # Helper: Overlap Resolution for Labels
     def resolve_overlaps(points, ax_idx):
         if not points: return []
         points.sort(key=lambda x: x['y'])
@@ -5147,9 +4995,7 @@ def plot_energy_scenarios(exp_reports, start_year=2021):
                 curr['y'] = prev['y'] + buffer
         return points
 
-    # ==========================================================================
     # FIGURE 1: CORE ENERGY VARIABLES
-    # ==========================================================================
     vars_fig1 = [
         # (a), (b): final energy (non-power oil and gas plus electricity), without the double count of
         # fossil electricity in total_energy_demand; (c), (d) include process and other non-combustion emissions
@@ -5241,9 +5087,7 @@ def plot_energy_scenarios(exp_reports, start_year=2021):
                 # Plot secondary line ONLY for plots (a) and (g) [TWh to EJ conversion]
                 # (The EJ axis of plots (a) and (g) is set from the TWh axis after the y-ticks, below.)
                 
-                # ======================================================================
-                # --- UNCERTAINTY BANDS LOGIC FOR EMISSIONS & INVESTMENT ---
-                # ======================================================================
+                # UNCERTAINTY BANDS LOGIC FOR EMISSIONS & INVESTMENT
                 is_sgi_active = False
                 if p is not None:
                     if getattr(p, 'net_emission_reduction_green_investments_exports_transformation', False) or getattr(p, 'vision_2030_target_CCU_SGI_Carbon', False):
@@ -5258,14 +5102,13 @@ def plot_energy_scenarios(exp_reports, start_year=2021):
                     ax.fill_between(years, series_vals - extra, series_vals, color=color, alpha=0.45,
                                     label=f"{sc_name} (NBS uncertainty)")
                     ax.plot(years, series_vals - extra, color=color, linewidth=1.0, linestyle=':')
-                # ======================================================================
 
                 # Plot secondary line ONLY for plot (b)
                 if ax_idx == 1 and ax2 is not None:
                     try:
                         elec_demand_total = rm['electricity_use_total'].values
                         # Renewable electricity delivered to the grid: generation minus the electricity
-                        # used for electrolysis (dedicated capacity for process hydrogen, November 2026)
+                        # used for electrolysis (dedicated capacity for process hydrogen)
                         re_gen_total = rm['renewable_energy_generation'].values - rm['re_used_for_hydrogen'].values
                         
                         re_met_demand = np.minimum(elec_demand_total, re_gen_total)
@@ -5349,7 +5192,7 @@ def plot_energy_scenarios(exp_reports, start_year=2021):
             y0_, y1_ = ax.get_ylim()
             ax2.set_ylim(y0_ * 0.0036, y1_ * 0.0036)
 
-        # --- End-point labels (after the y-limits are final) ---
+        # End-point labels (after the y-limits are final)
         if endpoints_2060:
             y0_, y1_ = ax.get_ylim()
             gap_ = (y1_ - y0_) * 0.07          # minimum vertical distance between labels
@@ -5376,7 +5219,7 @@ def plot_energy_scenarios(exp_reports, start_year=2021):
                             if abs(p_annotate['y'] - p_annotate['real_y']) > 1e-9 else None)
                 ax.scatter([2060], [p_annotate['real_y']], color=p_annotate['color'], s=30, zorder=5, clip_on=False)
         
-        # --- Specific Legend Rules ---
+        # Specific Legend Rules
         if has_data: 
             if ax_idx == 0:
                 # Plot (a): Main Legend
@@ -5404,7 +5247,7 @@ def plot_nexus_water_all_scenarios(exp_reports, start_year=2021):
     1. Water for Energy (Billion m3)
     2. Energy for Water (TWh) with EJ on secondary axis
     Filters plotted data: allows solar/wind in the Baseline but blocks spurious mitigation values.
-    Formatting updated to match plot_energy_scenarios (Fonts, X-Limits, Annotations).
+    Same formatting as plot_energy_scenarios (fonts, x-limits, annotations).
     """
     import matplotlib.pyplot as plt
     import numpy as np
@@ -5425,7 +5268,7 @@ def plot_nexus_water_all_scenarios(exp_reports, start_year=2021):
     except:
         plt.style.use('ggplot')
 
-    # --- Formatting Constants ---
+    # Formatting Constants
     TITLE_FONT_SIZE = 16
     LABEL_FONT_SIZE = 16
     TICK_FONT_SIZE = 18
@@ -5485,21 +5328,16 @@ def plot_nexus_water_all_scenarios(exp_reports, start_year=2021):
         ccu_flow = rm.get('flow_reuse_recycle', pd.Series(np.zeros(len(rm)))).values
         sgi_flow = rm.get('flow_remove_nature', pd.Series(np.zeros(len(rm)))).values
 
-        # ======================================================================
         # Filter: prevent spurious mitigation data in the Baseline
-        # ======================================================================
         if sc_name in ["Baseline", "Steady_state"]:
-            # Keep re_solar and re_wind!
-            # But zero out the advanced tech so they don't draw phantom water
+            # Keep solar and wind, zero out the mitigation technologies (no water use without them)
             h2_prod = np.zeros_like(h2_prod)
             elec_load = np.zeros_like(elec_load)
             ccs_flow = np.zeros_like(ccs_flow)
             ccu_flow = np.zeros_like(ccu_flow)
             sgi_flow = np.zeros_like(sgi_flow)
 
-        # ----------------------------------------------------------------------
-        # A. Calculate Water for Energy (Billion m3)
-        # ----------------------------------------------------------------------
+        # Calculate Water for Energy (Billion m3)
         water_solar = (re_solar * wi_solar) * 1e-9
         water_wind = (re_wind * wi_wind) * 1e-9
         water_h2 = (h2_prod * wi_hydrogen) * 1e-9
@@ -5514,9 +5352,7 @@ def plot_nexus_water_all_scenarios(exp_reports, start_year=2021):
         if 'water_use_nexus' in rm:
             total_nexus_water_bm3 = rm['water_use_nexus'].values * 1e-9
         
-        # ----------------------------------------------------------------------
-        # B. Calculate Energy for Water (TWh)
-        # ----------------------------------------------------------------------
+        # Calculate Energy for Water (TWh)
         is_sust_or_v2030 = False
         if p is not None:
             if getattr(p, 'vision_2030_target_CCU_SGI_Carbon', False) or getattr(p, 'Transformation_scenario', False):
@@ -5542,13 +5378,11 @@ def plot_nexus_water_all_scenarios(exp_reports, start_year=2021):
         if 'electricity_nexus_water_total' in rm:
             total_energy_twh = rm['electricity_nexus_water_total'].values / 3600000.0
         
-        # ----------------------------------------------------------------------
-        # C. Plotting
-        # ----------------------------------------------------------------------
+        # Plotting
         if len(total_nexus_water_bm3) > 0:
             years = np.arange(start_year, start_year + len(total_nexus_water_bm3))
             
-            # --- SMOOTHING FIX: 5-Year Moving Average ---
+            # 5-year centred moving average
             smoothed_water = pd.Series(total_nexus_water_bm3).rolling(window=5, min_periods=1, center=True).mean().values
             smoothed_energy = pd.Series(total_energy_twh).rolling(window=5, min_periods=1, center=True).mean().values
             
@@ -5579,7 +5413,7 @@ def plot_nexus_water_all_scenarios(exp_reports, start_year=2021):
                 val_energy_60 = smoothed_energy[idx_60]
                 endpoints_ax2.append({'y': val_energy_60, 'real_y': val_energy_60, 'label': f"{val_energy_60:.3f} TWh", 'color': color})
 
-    # --- Final Formatting ---
+    # Final Formatting
     if has_data:
         # Format ax1 (Water)
         ax1.set_title("(a) Water for energy production\nand nature-based emission reduction", fontweight='bold', fontsize=TITLE_FONT_SIZE)
@@ -5611,9 +5445,9 @@ def plot_nexus_water_all_scenarios(exp_reports, start_year=2021):
             ax2.set_ylim(0, global_max_energy * 1.20)
             
         ax2.tick_params(axis='both', labelsize=TICK_FONT_SIZE)
-        # Legend explicitly removed from ax2
+        # No legend on ax2
         
-    # --- End-point labels (after the y-limits are set) ---
+    # End-point labels (after the y-limits are set)
     def resolve_overlaps(points, ax, min_gap_frac=0.07):
         """Spread labels so that neighbours are at least min_gap_frac of the axis height apart."""
         if not points: return []
@@ -5659,7 +5493,7 @@ def plot_nexus_water_all_scenarios(exp_reports, start_year=2021):
 
 def plot_energy_scenarios_2(exp_reports, start_year=2021):
     """
-    Generates high-quality energy scenario plots with sub-labels (a, b, c...)
+    Generates energy scenario plots with sub-labels (a, b, c...)
     Includes non-overlapping value and % of GDP annotations for investment.
     """
     desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
@@ -5691,7 +5525,7 @@ def plot_energy_scenarios_2(exp_reports, start_year=2021):
     LEGEND_FONT_SIZE = 12
     SUB_LABEL_SIZE = 16
 
-    # --- Helper: Overlap Resolution for Labels ---
+    # Helper: Overlap Resolution for Labels
     def resolve_overlaps(points):
         if not points: return []
         points.sort(key=lambda x: x['y'])
@@ -5707,9 +5541,7 @@ def plot_energy_scenarios_2(exp_reports, start_year=2021):
                 curr['y'] = prev['y'] + buffer
         return points
 
-    # ==========================================================================
     # FIGURE 1: CORE ENERGY VARIABLES
-    # ==========================================================================
     vars_fig1 = [
         ('total_energy_demand', 'Total Energy Demand', 'TWh', 1/3600000),
         ('renewable_energy_share', 'Renewable Energy Share', '%', 100),
@@ -5821,9 +5653,7 @@ def plot_energy_scenarios_2(exp_reports, start_year=2021):
     fig1.tight_layout()
     fig1.savefig(os.path.join(desktop_path, "Energy_Scenarios_Core.pdf"), format='pdf', dpi=300, bbox_inches='tight')
 
-    # ==========================================================================
     # FIGURE 2: TOTAL INVESTMENT & BREAKDOWNS
-    # ==========================================================================
     vars_fig2_line = [
         ('I', 'Total Investment', 'Billion SAR', 1/1000000),
         ('green_export_total', 'Total Green Exports (Comparison)', 'Billion SAR', 1/1000000)
@@ -5931,9 +5761,7 @@ def plot_technology_investment_log_timeline(results, start_year=2021, end_year=2
     t_indices = years - 2020  # Model t indices (e.g., 2021 = 1)
     TO_BILLION = 1_000_000.0
 
-    # ========================================================================
-    # 1. HELPER FUNCTIONS TO EXTRACT TIME-SERIES
-    # ========================================================================
+    # HELPER FUNCTIONS TO EXTRACT TIME-SERIES
     def get_macro_ts(var_name):
         if var_name in results.macro:
             ts = results.macro[var_name].reindex(t_indices).fillna(0)
@@ -5946,9 +5774,7 @@ def plot_technology_investment_log_timeline(results, start_year=2021, end_year=2
             return ts / TO_BILLION
         return pd.Series(0.0, index=t_indices)
 
-    # ========================================================================
-    # 2. BUILD DATA TIMELINES
-    # ========================================================================
+    # BUILD DATA TIMELINES
     data = pd.DataFrame(index=years)
     
     # Macro Variables
@@ -5974,14 +5800,12 @@ def plot_technology_investment_log_timeline(results, start_year=2021, end_year=2
     data['Carbon Util. (CCU)'] = get_sectoral_ts('I_netzero_ccu_').values
     data['Nature-Based (SGI)'] = get_sectoral_ts('I_netzero_nature_').values
 
-    # --- LOG SCALE FIX: Replace exactly 0 with NaN ---
+    # Replace zeros with NaN for the log scale
     # This prevents the log scale from crashing or plunging to negative infinity.
     # The line will simply "start" in the year investment becomes > 0.
     data.replace(0.0, np.nan, inplace=True)
 
-    # ========================================================================
-    # 3. RENDER INTERACTIVE PLOTLY CHART
-    # ========================================================================
+    # RENDER INTERACTIVE PLOTLY CHART
     fig = go.Figure()
 
     color_map = {
@@ -6050,9 +5874,7 @@ def plot_technology_investment_timeline(results, start_year=2021, end_year=2060)
     t_indices = years - 2020  # Model t indices (e.g., 2021 = 1)
     TO_BILLION = 1_000_000.0
 
-    # ========================================================================
-    # 1. HELPER FUNCTIONS TO EXTRACT TIME-SERIES
-    # ========================================================================
+    # HELPER FUNCTIONS TO EXTRACT TIME-SERIES
     def get_macro_ts(var_name):
         """Extracts a variable from results.macro across the timeline."""
         if var_name in results.macro:
@@ -6069,9 +5891,7 @@ def plot_technology_investment_timeline(results, start_year=2021, end_year=2060)
             return ts / TO_BILLION
         return pd.Series(0.0, index=t_indices)
 
-    # ========================================================================
-    # 2. BUILD DATA TIMELINES
-    # ========================================================================
+    # BUILD DATA TIMELINES
     data = pd.DataFrame(index=years)
     
     # Macro Variables
@@ -6089,7 +5909,7 @@ def plot_technology_investment_timeline(results, start_year=2021, end_year=2060)
         data['Energy Efficiency'] = get_sectoral_ts('I_efficiency').values
 
     # Grid Upgrades (Calculated dynamically from load, same as Sankey)
-    elec_load_gj = get_macro_ts('electrification_added_load').values * TO_BILLION # Un-divide to get true GJ
+    elec_load_gj = get_macro_ts('electrification_added_load').values * TO_BILLION # back to GJ
     data['Grid Upgrades'] = (elec_load_gj * 116.0 / 1000.0) / TO_BILLION
 
     # Sectoral Variables (Net Zero Infrastructure)
@@ -6097,12 +5917,10 @@ def plot_technology_investment_timeline(results, start_year=2021, end_year=2060)
     data['Carbon Util. (CCU)'] = get_sectoral_ts('I_netzero_ccu').values
     data['Nature-Based (SGI)'] = get_sectoral_ts('I_netzero_nature').values
 
-    # ========================================================================
-    # 3. RENDER INTERACTIVE PLOTLY CHART
-    # ========================================================================
+    # RENDER INTERACTIVE PLOTLY CHART
     fig = go.Figure()
 
-    # Color mapping to match your Sankey plot aesthetic
+    # Colours consistent with the Sankey plots
     color_map = {
         'Solar PV': '#FFD700', 'Wind Power': '#87CEEB', 'Bioenergy': '#8B4513',
         'Green Hydrogen': '#a1d99b', 'Battery Storage': '#9ecae1',
@@ -6131,7 +5949,7 @@ def plot_technology_investment_timeline(results, start_year=2021, end_year=2060)
         xaxis_title='<b>Year</b>',
         yaxis_title='<b>Investment (Billion SAR)</b>',
         template='plotly_white',
-        hovermode='x unified', # Shows all values in a neat box when hovering over a year
+        hovermode='x unified', # one hover box with all values per year
         legend=dict(
             title_text='<b>Technologies</b>',
             yanchor="top",
@@ -6149,9 +5967,6 @@ def plot_technology_investment_timeline(results, start_year=2021, end_year=2060)
 
     fig.show()
 
-# ================================
-# How to run it:
-# ================================
 def plot_real_energy_sankey(results, target_year):
     """
     Generates a Sankey diagram for a specific year (e.g., 2030 or 2060).
@@ -6162,9 +5977,7 @@ def plot_real_energy_sankey(results, target_year):
     t = target_year - 2020
     TO_BILLION = 1_000_000.0
 
-    # ========================================================================
-    # 1. Data extraction (with a small-value fallback for zero values)
-    # ========================================================================
+    # Data extraction (with a small-value fallback for zero values)
     def get_macro(var):
         return max(1e-5, results.macro[var].loc[t] / TO_BILLION if var in results.macro else 1e-5)
     
@@ -6205,23 +6018,21 @@ def plot_real_energy_sankey(results, target_year):
     val_ccu    = get_sectoral('I_netzero_ccu')
     val_nature = get_sectoral('I_netzero_nature')
 
-    # ========================================================================
-    # 2. DEFINE NODES
-    # ========================================================================
+    # DEFINE NODES
     base_labels = [
-        # --- 0 to 4: PAYERS (Ownership) ---
+        # 0 to 4: PAYERS (Ownership)
         "Electricity, gas, steam & AC supply", "Manufacture of chemicals (Heavy Ind.)", 
         "Agriculture, Forestry & Fishing", "Target Industries (Electrification)", "All Economy Sectors (Efficiency)",
         
-        # --- 5 to 15: TECHNOLOGIES ---
+        # 5 to 15: TECHNOLOGIES
         "Solar PV", "Wind Power", "Bioenergy", "Grid Upgrades", "Green Hydrogen", 
         "Battery Storage", "Carbon Capture (CCS)", "Carbon Util. (CCU)", "Nature-Based (SGI)", 
         "Electrification Eq.", "Efficiency Retrofits",
         
-        # --- 16 to 22: BUILDERS (Supply Chain & Imports) ---
+        # 16 to 22: BUILDERS (Supply Chain & Imports)
         "Manufacture of electrical equipment", "Civil engineering", "Manufacture of basic metals", 
         "Manufacture of machinery n.e.c.", "Construction of buildings", "Rest of Economy (Supply Chain)",
-        "Imports (International Markets)" # <-- NEW NODE 22
+        "Imports (International Markets)" # 22
     ]
 
     color_map = [
@@ -6233,16 +6044,14 @@ def plot_real_energy_sankey(results, target_year):
         '#636363', '#8c564b', '#737373', '#525252', '#8c564b', '#d9d9d9', '#fb6a4a'
     ]
 
-    # ========================================================================
-    # 3. DEFINE FLOWS
-    # ========================================================================
+    # DEFINE FLOWS
     sources, targets, values = [], [], []
     def add_flow(src, tgt, val):
         sources.append(src)
         targets.append(tgt)
         values.append(val)
 
-    # --- A. PAYER TO TECHNOLOGY ---
+    # PAYER TO TECHNOLOGY
     add_flow(0, 5, val_solar)
     add_flow(0, 6, val_wind)
     add_flow(0, 7, val_bio)
@@ -6256,9 +6065,9 @@ def plot_real_energy_sankey(results, target_year):
     add_flow(3, 14, val_elec)
     add_flow(4, 15, val_eff)
 
-    # --- B. TECHNOLOGY TO BUILDER / IMPORT ---
+    # TECHNOLOGY TO BUILDER / IMPORT
     
-    # Solar (You can route parts of this to node 22 if you calculate Solar imports later)
+    # Solar
     add_flow(5, 19, val_solar * 0.40) # Machinery
     add_flow(5, 16, val_solar * 0.40) # Elec eq
     add_flow(5, 17, val_solar * 0.20) # Civil eng
@@ -6281,7 +6090,7 @@ def plot_real_energy_sankey(results, target_year):
     add_flow(9, 19, val_h2 * 0.60) # Machinery
     add_flow(9, 17, val_h2 * 0.40) # Civil eng
     
-    # --- UPDATED: Storage split between Local Machinery and Imports ---
+    # Storage split between Local Machinery and Imports
     add_flow(10, 19, val_storage_local)  # Local production goes to Machinery
     add_flow(10, 22, val_storage_import) # Imports go to International Markets
     
@@ -6299,9 +6108,7 @@ def plot_real_energy_sankey(results, target_year):
     add_flow(15, 19, val_eff * 0.30) # Machinery
     add_flow(15, 21, val_eff * 0.20) # Rest of economy
 
-    # ========================================================================
-    # 4. DYNAMIC NODE LABELS
-    # ========================================================================
+    # DYNAMIC NODE LABELS
     inflows = [0] * len(base_labels)
     outflows = [0] * len(base_labels)
     
@@ -6318,9 +6125,7 @@ def plot_real_energy_sankey(results, target_year):
         else:
             final_labels.append(f"{base_labels[i]}<br><b>{node_total:.2f} B SAR</b>")
 
-    # ========================================================================
-    # 5. RENDER PLOT
-    # ========================================================================
+    # RENDER PLOT
     fig = go.Figure(data=[go.Sankey(
         node=dict(
             pad=30, thickness=35,
@@ -6345,9 +6150,6 @@ def plot_real_energy_sankey(results, target_year):
     fig.show()
 
 
-# ==========================================
-# Run it for 2030 and 2060
-# ==========================================
 
 
 
@@ -6355,7 +6157,7 @@ def plot_real_energy_sankey(results, target_year):
 def plot_net_zero_cost_simple(results: 'ModelResults'):
     """
     Stacked Bar Chart including HYDROGEN, ELECTRIFICATION, BATTERY STORAGE, and EFFICIENCY Investment.
-    Updated Y-Axis limit to 1.05x Max.
+    Y-axis limit at 1.15 times the maximum.
     """
     import matplotlib.pyplot as plt
     import numpy as np
@@ -6367,7 +6169,7 @@ def plot_net_zero_cost_simple(results: 'ModelResults'):
     years = list(range(2021, 2021 + len(results.macro)))
     TO_BILLION = 1_000_000
     
-    # --- 1. DATA EXTRACTION ---
+    # DATA EXTRACTION
     inv_nature = results.sectoral['I_netzero_nature'].sum(axis=1).values / TO_BILLION
     inv_ccs = results.sectoral['I_netzero_ccs'].sum(axis=1).values / TO_BILLION
     inv_ccu = results.sectoral['I_netzero_ccu'].sum(axis=1).values / TO_BILLION
@@ -6382,7 +6184,7 @@ def plot_net_zero_cost_simple(results: 'ModelResults'):
         inv_elec = results.macro['I_electrification_total'].values / TO_BILLION
     else: inv_elec = np.zeros_like(inv_nature)
 
-    # [NEW] Efficiency Investment
+    # Efficiency Investment
     if 'I_efficiency_total' in results.macro:
         inv_effic = results.macro['I_efficiency_total'].values / TO_BILLION
     else:
@@ -6410,10 +6212,10 @@ def plot_net_zero_cost_simple(results: 'ModelResults'):
     mask = gdp_val > 0
     cost_pct_gdp[mask] = (total_cost[mask] / gdp_val[mask]) * 100
 
-    # --- 2. PLOTTING ---
+    # PLOTTING
     fig, ax = plt.subplots(figsize=(12, 8))
     
-    # Stacked Bar Chart Logic
+    # Stacked bar chart
     b1 = np.zeros_like(inv_nature)
     ax.bar(years, inv_nature, bottom=b1, color='#2ca02c', label='Nature (SGI)', alpha=0.8)
     
@@ -6429,7 +6231,7 @@ def plot_net_zero_cost_simple(results: 'ModelResults'):
     b5 = b4 + inv_h2
     ax.bar(years, inv_elec, bottom=b5, color='#ff7f0e', label='Electrification (Retrofit)', alpha=0.9)
     
-    # [NEW] Efficiency Layer
+    # Efficiency Layer
     b6 = b5 + inv_elec
     ax.bar(years, inv_effic, bottom=b6, color='#17becf', label='Energy Efficiency', alpha=0.9)
 
@@ -6448,10 +6250,10 @@ def plot_net_zero_cost_simple(results: 'ModelResults'):
     ax.legend(loc='upper left', title="Cost Component", ncol=2)
     ax.grid(axis='y', linestyle='--', alpha=0.3)
     
-    # --- UPDATED Y-LIMIT ---
+    # Y-limit
     ax.set_ylim(0, max(total_cost) * 1.15) 
 
-    # --- 3. ANNOTATIONS (Every 5 Years) ---
+    # ANNOTATIONS (Every 5 Years)
     print("\n--- COST & GDP SHARE REPORT ---")
     for i, year in enumerate(years):
         if (year >= 2025 and year % 5 == 0) or year == 2060:
@@ -6476,7 +6278,6 @@ def plot_green_exports_breakdown(results: 'ModelResults', scenario_name="Net Zer
     import pandas as pd
     
     p = results.config.p
-    # Only run if meaningful
     if not (getattr(p, 'net_emission_reduction_green_investments_exports_transformation', False) or getattr(p, 'vision_2030_scenario', False)):
         print("Skipping Green Export Breakdown: Scenario is not Net Zero/V2030.")
         return
@@ -6485,11 +6286,10 @@ def plot_green_exports_breakdown(results: 'ModelResults', scenario_name="Net Zer
     years = list(range(2021, 2021 + len(results.macro)))
     
     # 1. Calculate Components (Billion SAR)
-    # -------------------------------------
     
     # A. Hydrogen (Chemicals)
     # Access from 'macro' dataframe instead of 'variables' object
-    # Note: results.macro already excludes t=0, so no [1:] slicing needed
+    # results.macro excludes t=0
     if 'hydrogen_export' in results.macro:
         h2_vol = results.macro['hydrogen_export'].values 
         h2_val = (h2_vol * getattr(p, 'hydrogen_export_price_sar_gj', 90.0)) / 1e9
@@ -6525,7 +6325,7 @@ def plot_green_exports_breakdown(results: 'ModelResults', scenario_name="Net Zer
     else:
         inv_elec = np.zeros_like(h2_val)
         
-    # CCU is likely in sectoral, so we sum it if it exists
+    # CCU investment: sectoral sum if available, else macro
     if 'I_netzero_ccu' in results.sectoral:
         inv_ccu = results.sectoral['I_netzero_ccu'].sum(axis=1).values
     elif 'I_netzero_ccu' in results.macro:
@@ -6546,7 +6346,6 @@ def plot_green_exports_breakdown(results: 'ModelResults', scenario_name="Net Zer
         battery_val = np.zeros_like(h2_val)
 
     # 2. Plotting
-    # -------------------------------------
     fig, ax = plt.subplots(figsize=(12, 7))
     
     # Data stack
@@ -6600,9 +6399,7 @@ def plot_net_zero_funding_sources(results: 'ModelResults'):
     years = list(range(2021, 2021 + len(results.macro)))
     TO_BILLION = 1_000_000
     
-    # ==============================================================================
-    # 1. EXTRACT DATA
-    # ==============================================================================
+    # EXTRACT DATA
     inv_nature = results.sectoral['I_netzero_nature'].sum(axis=1).values / TO_BILLION
     inv_ccs = results.sectoral['I_netzero_ccs'].sum(axis=1).values / TO_BILLION
     cost_credits = results.sectoral['I_carbon_credits'].sum(axis=1).values / TO_BILLION
@@ -6611,57 +6408,53 @@ def plot_net_zero_funding_sources(results: 'ModelResults'):
     inv_h2 = results.macro.get('I_hydrogen', pd.Series(0, index=results.macro.index)).values / TO_BILLION
     inv_elec = results.macro.get('I_electrification_total', pd.Series(0, index=results.macro.index)).values / TO_BILLION
     
-    # Efficiency (Robust extraction)
+    # Efficiency
     if 'I_efficiency_total' in results.macro:
         inv_effic = results.macro['I_efficiency_total'].values / TO_BILLION
     else:
         try: inv_effic = results.sectoral['I_efficiency'].sum(axis=1).values / TO_BILLION
         except: inv_effic = np.zeros_like(inv_nature)
 
-    # Storage (Robust extraction)
+    # Storage
     if 'I_storage' in results.macro:
         inv_storage = results.macro['I_storage'].values / TO_BILLION
     elif hasattr(results.variables, 'I_storage'):
          inv_storage = results.variables.I_storage[1:] / TO_BILLION
     else: inv_storage = np.zeros_like(inv_nature)
 
-    # ==============================================================================
-    # 2. SEGREGATE FUNDING (6 Layers)
-    # ==============================================================================
+    # SEGREGATE FUNDING (6 Layers)
     
-    # --- Layer 1: Govt Infrastructure (Sunk Costs) ---
+    # Layer 1: Govt Infrastructure (Sunk Costs)
     # 100% of Nature, CCS, Credits
     fund_gov_infra = inv_nature + inv_ccs + cost_credits
 
-    # --- Layer 2: Govt Strategic Projects (Catalytic Capital) ---
+    # Layer 2: Govt Strategic Projects (Catalytic Capital)
     # 80% of H2, 50% of Storage, 50% of CCU
     fund_gov_strat = (inv_h2 * 0.8) + (inv_storage * 0.5) + (inv_ccu * 0.5)
 
-    # --- Layer 3: Private Chemicals (New Commodities) ---
+    # Layer 3: Private Chemicals (New Commodities)
     # 20% of H2, 50% of CCU
     fund_priv_chem = (inv_h2 * 0.2) + (inv_ccu * 0.5)
     
-    # --- Layer 4: Private Utilities (Grid Assets) ---
+    # Layer 4: Private Utilities (Grid Assets)
     # 50% of Storage
     fund_priv_util = (inv_storage * 0.5)
     
-    # --- Layer 5: Private Industry - Electrification ---
+    # Layer 5: Private Industry - Electrification
     # 100% of Electrification cost
     fund_priv_elec = inv_elec
     
-    # --- Layer 6: Private Industry - Efficiency ---
+    # Layer 6: Private Industry - Efficiency
     # 100% of Efficiency cost
     fund_priv_effic = inv_effic
 
     # Total for Y-Limit
     total_cost = fund_gov_infra + fund_gov_strat + fund_priv_chem + fund_priv_util + fund_priv_elec + fund_priv_effic
 
-    # ==============================================================================
-    # 3. PLOTTING
-    # ==============================================================================
+    # PLOTTING
     fig, ax = plt.subplots(figsize=(14, 9))
     
-    # Colors (Matching the detailed logic)
+    # Colours
     c_g_infra = '#1f77b4'   # Dark Blue
     c_g_strat = '#6baed6'   # Light Blue
     c_p_chem  = '#9467bd'   # Purple
@@ -6702,7 +6495,7 @@ def plot_net_zero_funding_sources(results: 'ModelResults'):
     ax.legend(loc='upper left', title="Who Pays?", fontsize=10, ncol=2)
     ax.grid(axis='y', linestyle='--', alpha=0.3)
 
-    # --- 4. ANNOTATIONS ---
+    # ANNOTATIONS
     print("\n--- DETAILED FUNDING REPORT ---")
     for i, year in enumerate(years):
         if (year >= 2025 and year % 5 == 0) or year == 2060:
@@ -6734,7 +6527,7 @@ def plot_net_zero_funding_sources(results: 'ModelResults'):
 def plot_net_zero_required_balance(results: 'ModelResults'):
     """
     Plots Physical Gap vs. Financial Cost.
-    VISUALIZATION UPDATE: Added Energy Efficiency to Total Cost Stack.
+    The total cost stack includes energy efficiency.
     """
     import matplotlib.pyplot as plt
     import numpy as np
@@ -6746,7 +6539,7 @@ def plot_net_zero_required_balance(results: 'ModelResults'):
     years = list(range(2021, 2021 + len(results.macro)))
     TO_BILLION = 1_000_000
     
-    # --- 1. DATA EXTRACTION ---
+    # DATA EXTRACTION
     residual_emissions = results.macro['emissions_net_total'].values
     
     # Liquidity Curve
@@ -6762,7 +6555,7 @@ def plot_net_zero_required_balance(results: 'ModelResults'):
     credits_purchased = np.minimum(residual_emissions, liquidity_curve)
     final_balance = residual_emissions - credits_purchased
     
-    # --- COST EXTRACTION ---
+    # COST EXTRACTION
     cost_credits = results.sectoral['I_carbon_credits'].sum(axis=1).values / TO_BILLION
     inv_ccs = results.sectoral['I_netzero_ccs'].sum(axis=1).values / TO_BILLION
     inv_nature = results.sectoral['I_netzero_nature'].sum(axis=1).values / TO_BILLION
@@ -6771,7 +6564,7 @@ def plot_net_zero_required_balance(results: 'ModelResults'):
     inv_h2 = results.macro.get('I_hydrogen', pd.Series(0, index=results.macro.index)).values / TO_BILLION
     inv_elec = results.macro.get('I_electrification_total', pd.Series(0, index=results.macro.index)).values / TO_BILLION
 
-    # [NEW] Efficiency
+    # Efficiency
     if 'I_efficiency_total' in results.macro:
         inv_effic = results.macro['I_efficiency_total'].values / TO_BILLION
     else:
@@ -6785,7 +6578,7 @@ def plot_net_zero_required_balance(results: 'ModelResults'):
          inv_storage = results.variables.I_storage[1:] / TO_BILLION
     else: inv_storage = np.zeros_like(inv_nature)
 
-    # --- Stack Construction ---
+    # Stack Construction
     # Cost Base = Everything EXCEPT Batteries (Efficiency included here)
     cost_base = cost_credits + inv_ccs + inv_nature + inv_ccu + inv_h2 + inv_elec + inv_effic
     
@@ -6797,7 +6590,7 @@ def plot_net_zero_required_balance(results: 'ModelResults'):
     mask = gdp_bn > 0
     cost_pct_gdp[mask] = (cost_total[mask] / gdp_bn[mask]) * 100
 
-    # --- 2. PLOTTING ---
+    # PLOTTING
     fig, ax1 = plt.subplots(figsize=(16, 9))
     
     # Primary Axis (Physical)
@@ -6823,7 +6616,7 @@ def plot_net_zero_required_balance(results: 'ModelResults'):
     ax2.tick_params(axis='y', labelcolor='#d62728')
     ax2.set_ylim(0, max(cost_total) * 1.35) 
 
-    # --- 3. ANNOTATIONS ---
+    # ANNOTATIONS
     # Battery Arrow
     max_bat_idx = np.argmax(inv_storage)
     max_bat_year = years[max_bat_idx]
@@ -6864,7 +6657,7 @@ def plot_net_zero_required_balance_2(results: 'ModelResults'):
     """
     Primary Axis (Stacked Area): Decomposition of emission reductions.
     Secondary Axis (Line): Total System Cost + GDP % + Baseline + Narrative Labels.
-    Update: Added Battery Storage AND Energy Efficiency to Total System Cost.
+    Total system cost includes battery storage and energy efficiency.
     """
     import matplotlib.pyplot as plt
     import pandas as pd
@@ -6879,9 +6672,7 @@ def plot_net_zero_required_balance_2(results: 'ModelResults'):
     years = list(range(2021, 2021 + len(results.macro)))
     TO_BILLION = 1_000_000
     
-    # ==============================================================================
-    # 1. DATA EXTRACTION (Abatement Wedges)
-    # ==============================================================================
+    # DATA EXTRACTION (Abatement Wedges)
     abated_ccu = results.macro['flow_reuse_recycle'].values
     abated_ccs = results.macro['flow_remove_ccs'].values
     abated_nature = results.macro['flow_remove_nature'].values
@@ -6914,12 +6705,10 @@ def plot_net_zero_required_balance_2(results: 'ModelResults'):
     abated_market = np.minimum(net_physical, liquidity_curve)
     final_gap = net_physical - abated_market 
 
-    # --- Baseline Emissions ---
+    # Baseline Emissions
     baseline_emissions = final_gap + abated_market + abated_nature + abated_ccs + abated_ccu + abated_h2 + abated_elec
     
-    # ==============================================================================
-    # 2. FINANCIAL DATA (Total Cost including Efficiency)
-    # ==============================================================================
+    # FINANCIAL DATA (Total Cost including Efficiency)
     cost_credits = results.sectoral['I_carbon_credits'].sum(axis=1).values / TO_BILLION
     inv_ccs = results.sectoral['I_netzero_ccs'].sum(axis=1).values / TO_BILLION
     inv_nature = results.sectoral['I_netzero_nature'].sum(axis=1).values / TO_BILLION
@@ -6928,7 +6717,7 @@ def plot_net_zero_required_balance_2(results: 'ModelResults'):
     inv_elec = results.macro.get('I_electrification_total', pd.Series(0, index=results.macro.index)).values / TO_BILLION
     inv_storage = results.macro.get('I_storage', pd.Series(0, index=results.macro.index)).values / TO_BILLION
 
-    # [NEW] Efficiency
+    # Efficiency
     if 'I_efficiency_total' in results.macro:
         inv_effic = results.macro['I_efficiency_total'].values / TO_BILLION
     else:
@@ -6942,9 +6731,7 @@ def plot_net_zero_required_balance_2(results: 'ModelResults'):
     mask = gdp_bn > 0
     cost_pct_gdp[mask] = (total_system_cost_bn[mask] / gdp_bn[mask]) * 100
 
-    # ==============================================================================
-    # 3. PLOTTING
-    # ==============================================================================
+    # PLOTTING
     fig, ax1 = plt.subplots(figsize=(18, 11))
     pal = ['#e0e0e0', '#d62728', '#2ca02c', '#1f77b4', '#9467bd', '#e377c2', '#ff7f0e']
     labels = ['Unabated Gap', 'Market Offsets', 'Nature (SGI)', 'CCS Removal', 'CCU / Reuse', 'Green H2', 'Electrification']
@@ -6953,7 +6740,7 @@ def plot_net_zero_required_balance_2(results: 'ModelResults'):
     ax1.stackplot(years, final_gap, abated_market, abated_nature, abated_ccs, abated_ccu, abated_h2, abated_elec,
                   colors=pal, labels=labels, alpha=0.85)
     
-    # --- ADDED SGI UNCERTAINTY BAND ---
+    # ADDED SGI UNCERTAINTY BAND
     # Calculate the bottom of the Nature wedge
     nature_bottom = final_gap + abated_market
     
@@ -6970,17 +6757,16 @@ def plot_net_zero_required_balance_2(results: 'ModelResults'):
     ax1.fill_between(years, nature_bottom + min_nature, nature_bottom + max_nature,
                      facecolor='none', edgecolor='#2ca02c', hatch='///', alpha=0.5, 
                      linewidth=1.5, label='SGI Uncertainty Range')
-    # -----------------------------------
 
     # Baseline line
     ax1.plot(years, baseline_emissions, color='black', linestyle=':', linewidth=2.5, label='Baseline Emissions', zorder=5)
 
-    # --- Axis Limits ---
+    # Axis Limits
     y_max_ems = max(baseline_emissions) * 1.1 
     ax1.set_ylim(0, y_max_ems)
     ax1.set_xlim(years[0], 2062)
 
-    # --- A. Vertical Milestone Lines ---
+    # Vertical Milestone Lines
     milestones = [
         (2030, "Vision 2030\n(600M Trees)", 'black'),
         (2035, "CCS Target\n(44 Mtpa)", '#1f77b4'), 
@@ -6992,7 +6778,7 @@ def plot_net_zero_required_balance_2(results: 'ModelResults'):
             ax1.text(yr, y_max_ems * 0.92, txt, color=col, fontweight='bold', ha='center', 
                      bbox=dict(facecolor='white', alpha=0.8, edgecolor=col))
 
-    # --- B. Narrative Arrows ---
+    # Narrative Arrows
     def get_wedge_center(year_idx, wedge_indices):
         data_stack = [final_gap, abated_market, abated_nature, abated_ccs, abated_ccu, abated_h2, abated_elec]
         bottom = sum(data_stack[i][year_idx] for i in range(wedge_indices))
@@ -7017,7 +6803,7 @@ def plot_net_zero_required_balance_2(results: 'ModelResults'):
                          fontsize=10, fontweight='bold', color=col, va='center',
                          bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=col, alpha=0.9))
 
-    # --- C. Future Growth Targets Box (Moved to North-West) ---
+    # Future Growth Targets Box (Moved to North-West)
     elec_rate_disp = getattr(p, 'electrification_annual_rate', 0.03) * 100
     cm_growth_disp = cm_growth_rate * 100
     growth_targets_text = (
@@ -7035,11 +6821,11 @@ def plot_net_zero_required_balance_2(results: 'ModelResults'):
              verticalalignment='top', ha='left',
              bbox=dict(boxstyle="round,pad=0.5", fc="#f8f9fa", ec="#333333", lw=2, alpha=0.95))
 
-    # --- Secondary Axis: Cost & GDP % ---
+    # Secondary Axis: Cost & GDP %
     ax2 = ax1.twinx()
     ax2.plot(years, total_system_cost_bn, color='#444444', linewidth=2, alpha=0.4, label='Total Cost')
     
-    # Updated to 10-year intervals and axis starting at 40
+    # Labels every 10 years, axis starts at 40
     ax2.set_ylim(40, max(total_system_cost_bn) * 1.1) 
 
     for yr in [2030, 2040, 2050, 2060]: # Every 10 years
@@ -7080,9 +6866,7 @@ def plot_water_energy_nexus(results: 'ModelResults'):
     p = results.config.p
     years = list(range(2021, 2021 + len(results.macro)))
 
-    # ==============================================================================
-    # 1. Define Water Intensities
-    # ==============================================================================
+    # Define Water Intensities
     wi_solar = 0.02 
     wi_wind = 0.0 
     wi_hydrogen = 0.15 
@@ -7091,9 +6875,7 @@ def plot_water_energy_nexus(results: 'ModelResults'):
     wi_ccu_bm3_per_mt = 0.0025 
     wi_sgi_bm3_per_mt = 0.315 
 
-    # ==============================================================================
-    # 2. Extract Data (Universal - No Forced Zeroing)
-    # ==============================================================================
+    # Extract Data (Universal - No Forced Zeroing)
     re_solar = results.macro.get('re_gen_solar', pd.Series(np.zeros(len(years)))).values
     re_wind = results.macro.get('re_gen_wind', pd.Series(np.zeros(len(years)))).values
     h2_prod = results.macro.get('hydrogen_production', pd.Series(np.zeros(len(years)))).values
@@ -7133,9 +6915,7 @@ def plot_water_energy_nexus(results: 'ModelResults'):
         min_sgi_water = water_sgi_bm3.copy()
         max_sgi_water = water_sgi_bm3.copy()
 
-    # ==============================================================================
-    # 3. FILTER DATA FOR SPECIFIC YEARS (2025, 2030, 2040, 2050, 2060)
-    # ==============================================================================
+    # FILTER DATA FOR SPECIFIC YEARS (2025, 2030, 2040, 2050, 2060)
     target_years = [2025, 2030, 2040, 2050, 2060]
     valid_years = [y for y in target_years if y in years]
     idx = [years.index(y) for y in valid_years]
@@ -7156,9 +6936,7 @@ def plot_water_energy_nexus(results: 'ModelResults'):
     f_ccs = water_ccs_bm3[idx] * 1000
     f_h2 = water_hydrogen_bm3[idx] * 1000
 
-    # ==============================================================================
-    # 4. PLOTTING SETUP
-    # ==============================================================================
+    # PLOTTING SETUP
     fig, ax1 = plt.subplots(figsize=(16, 9))
     ax2 = ax1.twinx()
 
@@ -7170,9 +6948,7 @@ def plot_water_energy_nexus(results: 'ModelResults'):
     x_primary = x_pos - width/2
     x_secondary = x_pos + width/2
 
-    # ==============================================================================
-    # 5. SECONDARY AXIS: OTHER TECHNOLOGIES (Million m3)
-    # ==============================================================================
+    # SECONDARY AXIS: OTHER TECHNOLOGIES (Million m3)
     data_other_mm3 = [f_wind, f_elec, f_solar, f_ccu, f_ccs, f_h2]
     labels_other = ['Wind Cooling', 'Grid Electrification', 'Solar PV Washing', 'CCU Process', 'CCS Cooling', 'Green Hydrogen']
     colors_other = ['#e0f3ff', '#ffbb78', '#ffdd57', '#c5b0d5', '#aec7e8', '#f7b6d2'] 
@@ -7184,9 +6960,7 @@ def plot_water_energy_nexus(results: 'ModelResults'):
         bars_sec.append(b)
         bottom_sec += data
 
-    # ==============================================================================
-    # 6. PRIMARY AXIS: SOURCES (Billion m3) & SGI ERROR BARS
-    # ==============================================================================
+    # PRIMARY AXIS: SOURCES (Billion m3) & SGI ERROR BARS
     color_ww = '#add8e6' # Light Blue
     color_ds = '#4682b4' # Medium Blue
     color_gw = '#000080' # Dark Blue
@@ -7208,9 +6982,7 @@ def plot_water_energy_nexus(results: 'ModelResults'):
     else:
         handles1 = [b1, b2, b3]
 
-    # ==============================================================================
-    # 7. FORMATTING & LEGENDS
-    # ==============================================================================
+    # FORMATTING & LEGENDS
     ax1.set_title("Water-Energy Nexus: SGI Uncertainty vs. Technology Demand", fontsize=16, fontweight='bold')
     ax1.set_xlabel("Year", fontsize=12, fontweight='bold')
     
@@ -7257,17 +7029,15 @@ def plot_dual_challenge_valley(results: 'ModelResults'):
     years = list(range(2021, 2021 + len(results.macro)))
     TO_BILLION = 1_000_000
     
-    # ==============================================================================
-    # 1. DATA EXTRACTION
-    # ==============================================================================
+    # DATA EXTRACTION
     
-    # --- A. GDP (Denominator & Secondary Plot) ---
+    # GDP (Denominator & Secondary Plot)
     if 'Y' in results.macro.columns:
         gdp_val = results.macro['Y'].values / TO_BILLION
     else:
         gdp_val = results.macro.get('gdp_nominal', np.zeros_like(years)).values / TO_BILLION
 
-    # --- B. Oil Exports ---
+    # Oil Exports
     oil_idx = -1
     if hasattr(pc, 'sectors'):
         for i, s_name in enumerate(pc.sectors):
@@ -7286,14 +7056,14 @@ def plot_dual_challenge_valley(results: 'ModelResults'):
         share = np.linspace(0.70, 0.35, len(years))
         oil_exports = total_e * share
 
-    # --- C. Total Non-Oil Exports ---
+    # Total Non-Oil Exports
     if 'EX_non_oil_total' in results.macro:
         nonoil_exports_total = results.macro['EX_non_oil_total'].values / TO_BILLION
     else:
         total_e = results.macro.get('E', np.zeros_like(years)).values / TO_BILLION
         nonoil_exports_total = total_e - oil_exports
 
-    # --- D. Calculate Contribution % ---
+    # Calculate Contribution %
     mask = gdp_val > 0
     pct_oil = np.zeros_like(gdp_val)
     pct_nonoil = np.zeros_like(gdp_val)
@@ -7301,16 +7071,14 @@ def plot_dual_challenge_valley(results: 'ModelResults'):
     pct_oil[mask] = (oil_exports[mask] / gdp_val[mask]) * 100
     pct_nonoil[mask] = (nonoil_exports_total[mask] / gdp_val[mask]) * 100
 
-    # ==============================================================================
-    # 2. PLOTTING
-    # ==============================================================================
+    # PLOTTING
     fig, ax1 = plt.subplots(figsize=(16, 10))
     
     color_oil = '#1f77b4'    # Blue (Oil)
     color_nonoil = '#2ca02c' # Green (Total Non-Oil)
     color_gdp = '#7f7f7f'    # Grey (GDP)
 
-    # --- PLOT SERIES (Primary Axis: Exports) ---
+    # PLOT SERIES (Primary Axis: Exports)
     # Oil
     ax1.plot(years, oil_exports, color=color_oil, linewidth=3, linestyle='-', label='Oil Exports')
     # Fill under Oil for visual weight
@@ -7327,7 +7095,7 @@ def plot_dual_challenge_valley(results: 'ModelResults'):
     max_val = max(max(oil_exports), max(nonoil_exports_total))
     ax1.set_ylim(0, max_val * 1.35) 
 
-    # --- SECONDARY AXIS (GDP) ---
+    # SECONDARY AXIS (GDP)
     ax2 = ax1.twinx()
     ax2.plot(years, gdp_val, color=color_gdp, linewidth=2.5, linestyle='-.', label='Nominal GDP')
     
@@ -7335,12 +7103,12 @@ def plot_dual_challenge_valley(results: 'ModelResults'):
     ax2.tick_params(axis='y', labelcolor=color_gdp)
     ax2.set_ylim(0, max(gdp_val) * 1.2) # Give GDP some headroom
 
-    # --- 3. ANNOTATIONS (Every 10 Years) ---
+    # ANNOTATIONS (Every 10 Years)
     for yr in [2030, 2040, 2050, 2060]:
         if yr in years:
             idx = years.index(yr)
             
-            # --- Oil Label ---
+            # Oil Label
             val_o = oil_exports[idx]
             p_o = pct_oil[idx]
             ax1.plot(yr, val_o, marker='o', color='white', markeredgecolor=color_oil, markersize=8, zorder=10)
@@ -7349,7 +7117,7 @@ def plot_dual_challenge_valley(results: 'ModelResults'):
                          ha='center', fontsize=9, fontweight='bold', color=color_oil,
                          bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=color_oil, alpha=0.9))
 
-            # --- Non-Oil Label ---
+            # Non-Oil Label
             val_n = nonoil_exports_total[idx]
             p_n = pct_nonoil[idx]
             ax1.plot(yr, val_n, marker='o', color='white', markeredgecolor=color_nonoil, markersize=8, zorder=10)
@@ -7358,7 +7126,7 @@ def plot_dual_challenge_valley(results: 'ModelResults'):
                          ha='center', fontsize=9, fontweight='bold', color=color_nonoil,
                          bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=color_nonoil, alpha=0.9))
 
-    # --- 4. CROSSOVER INDICATOR ---
+    # CROSSOVER INDICATOR
     # Now that they are on the same axis, the visual intersection IS the numeric intersection
     diff = nonoil_exports_total - oil_exports
     crossings = np.where(np.diff(np.sign(diff)))[0]
@@ -7405,9 +7173,7 @@ def plot_net_zero_tech_contribution_vs_cost(results: 'ModelResults'):
     years = list(range(2021, 2021 + len(results.macro)))
     TO_BILLION = 1_000_000
     
-    # ==============================================================================
-    # 1. PREPARE PHYSICAL DATA (The Abatement Wedges)
-    # ==============================================================================
+    # PREPARE PHYSICAL DATA (abatement wedges)
     
     # A. Explicit Removals (Directly from model output)
     # These are positive flows of CO2 being captured/removed
@@ -7416,7 +7182,7 @@ def plot_net_zero_tech_contribution_vs_cost(results: 'ModelResults'):
     abated_nature = results.macro['flow_remove_nature'].values
     
     # B. Market Offsets (Calculated based on liquidity limit)
-    # Re-calculate the actual purchased volume logic
+    # Purchased volume
     start_year_idx = 4 # 2025
     growth_rate = getattr(p, 'carbon_market_growth_rate', 0.12)
     start_vol = p.carbon_market_liquidity
@@ -7433,21 +7199,17 @@ def plot_net_zero_tech_contribution_vs_cost(results: 'ModelResults'):
     # The market fills the gap remaining after physical technologies
     # (Simplified logic for visualization: the market takes the remaining amount up to the limit)
     net_emissions_physical = results.macro['emissions_net_total'].values # This already includes CCS/Nature subtractions in model
-    # We need to reconstruct the "Gross" before offsets to calculate the offset wedge correctly
-    # In this model structure, 'emissions_net_total' IS the final balance physical.
-    # To show offsets as a wedge, we treat them as further reduction.
-    
-    # Let's verify what 'emissions_net_total' represents in energy_module.py:
-    # v.emissions_net_total[t] = v.emissions_gross_total[t] - (CCU + CCS + Nature)
-    # So, Market Credits are applied *after* this to reach financial net zero.
+    # 'emissions_net_total' is the physical balance:
+    # v.emissions_net_total[t] = v.emissions_gross_total[t] - (CCU + CCS + Nature) (energy_module.py)
+    # Market credits are applied after this to reach financial net zero, and are shown
+    # as a further reduction wedge.
     
     residual_before_market = results.macro['emissions_net_total'].values
     abated_market = np.minimum(residual_before_market, liquidity_curve)
     
-    # C. Hydrogen Contribution (Implicit in Model -> Explicit in Graph)
+    # C. Hydrogen Contribution
     # In the model, H2 reduces 'gross_emissions' directly by substituting fuel.
-    # To show it as a wedge, we calculate "Avoided Emissions".
-    # Factor: ~0.06 tons CO2 per GJ (Average of Oil/Gas)
+    # For the wedge, avoided emissions are computed with about 0.06 tCO2 per GJ (oil/gas mix).
     if 'hydrogen_domestic_use' in results.macro:
         h2_use_gj = results.macro['hydrogen_domestic_use'].values
         # Using a weighted emission factor (approx 60 kgCO2/GJ for gas/oil mix)
@@ -7456,17 +7218,13 @@ def plot_net_zero_tech_contribution_vs_cost(results: 'ModelResults'):
     else:
         abated_h2 = np.zeros_like(abated_ccs)
 
-    # D. Reconstruct the "Counterfactual Baseline"
-    # This represents what emissions would be if we did NOTHING (No H2, No CCS, No Nature)
+    # D. Counterfactual baseline without mitigation (no H2, no CCS, no Nature)
     # Start with Final Net Position (after market)
     final_net_position = residual_before_market - abated_market
     
-    # Stack upwards to get baseline
-    # Baseline = Final + Market + Nature + CCS + CCU + H2
+    # Baseline = Final + Market + Nature + CCS + CCU + H2 (stacked upwards)
     
-    # ==============================================================================
-    # 2. PREPARE FINANCIAL DATA (The Cost Line)
-    # ==============================================================================
+    # PREPARE FINANCIAL DATA (cost line)
     
     # CapEx + OpEx
     inv_ccu = results.sectoral['I_netzero_ccu'].sum(axis=1).values / TO_BILLION
@@ -7485,16 +7243,12 @@ def plot_net_zero_tech_contribution_vs_cost(results: 'ModelResults'):
     gdp_bn = results.macro['Y'].values / TO_BILLION
     cost_pct_gdp = np.divide(total_cost_bn, gdp_bn, out=np.zeros_like(gdp_bn), where=gdp_bn>0) * 100
 
-    # ==============================================================================
-    # 3. PLOTTING
-    # ==============================================================================
+    # PLOTTING
     
     fig, ax1 = plt.subplots(figsize=(14, 8))
     
-    # --- PRIMARY AXIS: ABATEMENT STACK (The Wedges) ---
-    
-    # We plot the "Remaining Emissions" at the bottom
-    # Then stack the solutions on top
+    # PRIMARY AXIS: ABATEMENT STACK
+    # Remaining emissions at the bottom, mitigation options stacked on top
     
     # Define the stack order (Bottom -> Top)
     # 1. Final Net Emissions (The Gap/Goal)
@@ -7525,7 +7279,7 @@ def plot_net_zero_tech_contribution_vs_cost(results: 'ModelResults'):
     ax1.set_xlim(years[0], years[-1])
     ax1.set_ylim(0, max(baseline_emissions)*1.1)
     
-    # --- SECONDARY AXIS: COST CURVE ---
+    # SECONDARY AXIS: COST CURVE
     ax2 = ax1.twinx()
     
     # Plot Cost Line
@@ -7547,16 +7301,14 @@ def plot_net_zero_tech_contribution_vs_cost(results: 'ModelResults'):
                      color='black', fontweight='bold', fontsize=9, ha='center',
                      bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.3', alpha=0.9))
 
-    # --- FINAL FORMATTING ---
+    # FINAL FORMATTING
     
     # Combine legends
     handles1, labels1 = ax1.get_legend_handles_labels()
-    # Reverse legend order to match stack visual (Top to Bottom)
-    # But keep Baseline line at top
-    # Display these values directly
+    # Reverse legend order to match the stack (top to bottom)
     ax1.legend(handles1[::-1], labels1[::-1], loc='upper left', bbox_to_anchor=(1.05, 1), title="Abatement Wedge")
     
-    # Add Cost Legend separately or manually placed
+    # Separate legend for the cost line
     ax2.legend([line_cost], ['Total System Cost'], loc='upper right')
 
     plt.title("Path to Net Zero: Technology Contributions vs. Financial Cost", fontsize=16, fontweight='bold')
@@ -7612,254 +7364,13 @@ def plot_net_zero_total_cost_breakdown(results: 'ModelResults'):
 
 
 
-#########################################################################################################
-def run_and_plot_sectoral_analysis(exp):
-#########################################################################################################
-    """
-    Runs the simulation with sectoral data enabled, captures hidden sectoral results,
-    and generates the Investment Pie Chart, Carbon Circular Economy Bar Chart, and Heatmap.
-    """
-    import model.model_classes as mmc
-    
-    # 1. Re-run with sectoral data enabled
-    print("▶️ Running FULL simulation (including sectoral data)...")
-    try:
-        exp.run(
-            scenarios=["Baseline", "Vision_2030", "Transformation", "Steady_state"],
-            iterations=1,
-            parameter_overrides={'Oil_exports_random_fluctuations': False},
-            include_sectoral=True
-        )
-        print("✅ Full simulation complete.")
-    except TypeError:
-        print("⚠️ The 'include_sectoral' flag was not recognized. Running standard...")
-        exp.run(
-            scenarios=["Baseline", "Vision_2030", "Transformation", "Steady_state"],
-            iterations=1,
-            parameter_overrides={'Oil_exports_random_fluctuations': False}
-        )
 
-    # --- STEP 1: DEFINE SECTOR NAMES ---
-    SECTOR_NAMES = [
-        "Crop and animal production", "Forestry and logging", "Fishing and aquaculture", 
-        "Mining of coal and lignite", "Extraction of crude petroleum and natural gas", 
-        "Mining of metal ores", "Other mining and quarrying", "Mining support service activities", 
-        "Manufacture of food products", "Manufacture of beverages", "Manufacture of tobacco products", 
-        "Manufacture of textiles", "Manufacture of wearing apparel", "Manufacture of leather related products", 
-        "Manufacture of wood and cork", "Manufacture of paper and paper products", 
-        "Printing and reproduction of recorded media", "Manufacture of coke and refined petroleum products", 
-        "Manufacture of chemicals and chemical products", "Manufacture of pharmaceuticals", 
-        "Manufacture of rubber and plastics", "Manufacture of other non-metallic mineral products", 
-        "Manufacture of basic metals", "Manufacture of fabricated metal products", 
-        "Manufacture of computer, electronic and optical", "Manufacture of electrical equipment", 
-        "Manufacture of machinery and equipment", "Manufacture of motor vehicles", 
-        "Manufacture of other transport equipment", "Manufacture of furniture", "Other manufacturing", 
-        "Repair and installation of machinery", "Electricity, gas, steam and air conditioning", 
-        "Water collection, treatment and supply", "Sewerage", "Waste collection, treatment and disposal", 
-        "Remediation activities", "Construction of buildings", "Civil engineering", 
-        "Specialized construction activities", "Wholesale and retail trade of motor vehicles", 
-        "Wholesale trade", "Retail trade", "Land transport and transport via pipelines", 
-        "Water transport", "Air transport", "Warehousing and support for transportation", 
-        "Postal and courier activities", "Accommodation", "Food and beverage service activities", 
-        "Publishing activities", "Motion picture, video and TV production", "Programming and broadcasting", 
-        "Telecommunications", "Computer programming and consultancy", "Information service activities", 
-        "Financial service activities", "Insurance, reinsurance and pension funding", 
-        "Activities auxiliary to financial service", "Real estate activities", "Legal and accounting activities", 
-        "Activities of head offices", "Architectural and engineering activities", 
-        "Scientific research and development", "Advertising and market research", 
-        "Other professional, scientific and technical", "Veterinary activities", "Rental and leasing activities", 
-        "Employment activities", "Travel agency and tour operator", "Security and investigation activities", 
-        "Services to buildings and landscape", "Office administrative and business support", 
-        "Public administration and defence", "Education", "Human health activities", 
-        "Residential care activities", "Social work activities", "Creative, arts and entertainment", 
-        "Libraries, archives, museums", "Sports and amusement activities", "Activities of membership organizations", 
-        "Repair of computers and personal goods", "Other personal service activities", 
-        "Activities of households as employers"
-    ]
-    if len(SECTOR_NAMES) < 150:
-        SECTOR_NAMES += [f"Sector {i}" for i in range(len(SECTOR_NAMES), 150)]
-
-    # --- STEP 2: CAPTURE DATA (PATCH) ---
-    print("🕵️‍♀️ Patching 'ModelResults' to capture data...")
-    CAPTURED_RAW_DATA = []
-    OriginalInit = mmc.ModelResults.__init__
-
-    def patched_init(self, *args, **kwargs):
-        OriginalInit(self, *args, **kwargs)
-        CAPTURED_RAW_DATA.append(self)
-
-    mmc.ModelResults.__init__ = patched_init
-    print("✅ Sensor active. Running simulations...")
-
-    scenarios_to_run = ["Baseline", "Vision_2030", "Transformation", "Steady_state"]
-
-    for sc in scenarios_to_run:
-        try:
-            exp.run(scenarios=[sc], iterations=1, parameter_overrides={'Oil_exports_random_fluctuations': False})
-        except:
-            pass
-
-    mmc.ModelResults.__init__ = OriginalInit 
-    print(f"🎉 Capture complete. Found {len(CAPTURED_RAW_DATA)} data objects.")
-
-    # --- STEP 3: SMART DATA EXTRACTION ---
-    print("\n🔍 ANALYZING DATA...")
-    sectoral_data_store = {}
-
-    def get_best_match(container, keywords):
-        """Finds first matching key or attribute."""
-        if not isinstance(container, dict):
-            container = {k: getattr(container, k) for k in dir(container) if not k.startswith('_')}
-        
-        for k, val in container.items():
-            if any(kw.lower() in k.lower() for kw in keywords):
-                if isinstance(val, pd.DataFrame): return val
-        return None
-
-    for i, sc_name in enumerate(scenarios_to_run):
-        if i < len(CAPTURED_RAW_DATA):
-            raw_obj = CAPTURED_RAW_DATA[i]
-            src = getattr(raw_obj, 'sectoral', getattr(raw_obj, 'results_sectoral', raw_obj))
-            
-            sectoral_data_store[sc_name] = {
-                'inv': get_best_match(src, ['I_', 'I', 'inv', 'capex']),
-                'oil_em': get_best_match(src, ['oil_em', 'em_oil']),
-                'gas_em': get_best_match(src, ['gas_em', 'em_gas']),
-                'elec_em': get_best_match(src, ['elec_em', 'em_elec']),
-                'oil_use': get_best_match(src, ['oil_use', 'use_oil']),
-                'gas_use': get_best_match(src, ['gas_use', 'use_gas']),
-                'elec_use': get_best_match(src, ['elec_use', 'use_elec'])
-            }
-
-    # --- STEP 4: PLOTTING ---
-    def safe_sum(d, keys):
-        total = 0
-        found_any = False
-        for k in keys:
-            val = d.get(k)
-            if val is not None:
-                total = total + val.fillna(0)
-                found_any = True
-        return total if found_any else None
-
-    # A. NET ZERO INVESTMENT PIE CHART (2060)
-    print("📊 Generating Investment Pie Chart...")
-    if "Net_zero" in sectoral_data_store:
-        inv_df = sectoral_data_store["Net_zero"]['inv']
-        if inv_df is not None:
-            inv_df = inv_df.fillna(0)
-            inv_2060 = inv_df.iloc[-1, :].copy()
-            
-            limit = min(len(inv_2060), len(SECTOR_NAMES))
-            inv_2060 = inv_2060.iloc[:limit]
-            inv_2060.index = SECTOR_NAMES[:limit]
-            
-            inv_2060 = inv_2060.sort_values(ascending=False).clip(lower=0)
-            
-            if inv_2060.sum() > 0:
-                top_10 = inv_2060.head(10)
-                others_val = inv_2060.iloc[10:].sum()
-                
-                pie_data = top_10.copy()
-                pie_data[f'Other Sectors ({len(inv_2060)-10})'] = others_val
-                
-                plt.figure(figsize=(10, 10))
-                colors = sns.color_palette("viridis", len(pie_data))
-                plt.pie(pie_data, labels=pie_data.index, autopct='%1.1f%%', startangle=140, 
-                        colors=colors, pctdistance=0.85, explode=[0.05]*len(pie_data))
-                plt.gca().add_artist(plt.Circle((0,0),0.70,fc='white'))
-                plt.title("Net Zero Investment Composition (2060)", fontsize=16, fontweight='bold')
-                plt.tight_layout()
-                plt.show()
-
-    # B. CARBON CIRCULAR ECONOMY (Bar Chart)
-    print("📊 Generating Carbon Circular Economy Chart...")
-    if "Net_zero" in sectoral_data_store:
-        inv_df = sectoral_data_store["Net_zero"]['inv']
-        if inv_df is not None:
-            inv_df = inv_df.fillna(0)
-            # Re-calculate limit in case it wasn't set in previous block
-            limit = min(inv_df.shape[1], len(SECTOR_NAMES))
-            total_inv = inv_df.iloc[:, :limit].sum(axis=0)
-            total_inv.index = SECTOR_NAMES[:limit]
-            top_CCE = total_inv.sort_values(ascending=False).head(10) / 1_000_000
-            
-            if top_CCE.sum() > 0:
-                plt.figure(figsize=(14, 7))
-                sns.barplot(x=top_CCE.values, y=top_CCE.index, palette="magma")
-                plt.title("Drivers of the Carbon Circular Economy (Cumulative Investment)", fontsize=18, fontweight='bold')
-                plt.xlabel("Total Investment (Billion SAR)", fontsize=12)
-                plt.grid(axis='x', alpha=0.3)
-                plt.tight_layout()
-                plt.show()
-
-    # C. HEATMAP (Fixed Safe Summation)
-    print("📊 Generating Heatmap...")
-    try:
-        hm_matrix = []
-        valid_scens = []
-        plot_title = "Decarbonization Progress (% Emissions Reduction)"
-        
-        base_data = sectoral_data_store.get("Baseline")
-        
-        if base_data:
-            if base_data['oil_em'] is not None or base_data['gas_em'] is not None:
-                keys = ['oil_em', 'gas_em', 'elec_em']
-            else:
-                keys = ['oil_use', 'gas_use', 'elec_use']
-                plot_title = "Energy Transition Progress (% Energy Use Reduction)"
-                print("   -> Using Energy Use (Emissions data missing)")
-
-            t_base = safe_sum(base_data, keys)
-            
-            if t_base is not None:
-                limit = min(t_base.shape[1], len(SECTOR_NAMES))
-                t_base = t_base.iloc[0, :limit]
-                t_base.index = SECTOR_NAMES[:limit]
-                top_20_names = t_base.sort_values(ascending=False).head(20).index.tolist()
-                top_20_indices = [SECTOR_NAMES.index(n) for n in top_20_names]
-
-                for sc_name in scenarios_to_run:
-                    if sc_name in sectoral_data_store:
-                        d = sectoral_data_store[sc_name]
-                        total = safe_sum(d, keys)
-                        
-                        if total is not None:
-                            start = total.iloc[0, top_20_indices]
-                            end = total.iloc[-1, top_20_indices]
-                            
-                            safe_start = start.replace(0, np.nan)
-                            red = ((start - end) / safe_start) * 100
-                            hm_matrix.append(red.fillna(0))
-                            valid_scens.append(sc_name)
-
-                if hm_matrix:
-                    df_hm = pd.DataFrame(hm_matrix, index=valid_scens, columns=top_20_names)
-                    plt.figure(figsize=(22, 10))
-                    sns.heatmap(df_hm, annot=True, fmt=".1f", cmap="RdYlGn", center=50, linewidths=.5)
-                    plt.title(f"{plot_title}: Top 20 Sectors", fontsize=20, fontweight='bold', pad=20)
-                    plt.xticks(rotation=45, ha='right', fontsize=12)
-                    plt.tight_layout()
-                    plt.show()
-                else:
-                    print("⚠️ Heatmap matrix empty (no valid scenarios).")
-            else:
-                print("⚠️ Could not calculate baseline total.")
-        else:
-            print("⚠️ Baseline data missing.")
-
-    except Exception as e:
-        print(f"❌ Heatmap Failed: {e}")
-
-# ======================================================================================================
-# Figures for the SI, November 2026: they work on the saved run reports (dict of scenario -> [report])
-# ======================================================================================================
+# Figures for the Supplementary Information: they work on the saved run reports (dict of scenario -> [report])
 def plot_liquid_displacement(results, save_path=None):
     """Financial and emission effect of the liquid displacement programme in Vision 2030 and Transformation.
 
-    Only the fuel switch is counted (November 2026; the earlier plot_oil_and_gas_switching_intuitive took
-    original minus final oil and gas use over all targeted sectors, including the power sector, and so
-    also counted renewables, electrification and efficiency):
+    Only the fuel switch is counted (not renewables, electrification and efficiency, which a comparison of
+    original and final oil and gas use over all targeted sectors would include):
       - outside the power sector: oil replaced one to one by gas (v.liquid_displaced_oil_gj),
       - in the power sector: electricity generated from gas instead of oil, against the 2023 oil share of
         fossil generation (v.liquid_displaced_power_elec_gj); fuel input with the plant efficiencies.
@@ -7914,7 +7425,7 @@ def plot_liquid_displacement(results, save_path=None):
 def plot_electrification_sectors(results, save_path=None):
     """Sector selection for electrification (Transformation scenario): the 25 sectors with the highest
     oil and gas intensity (power sector excluded); the 13 targets highlighted, air and water transport
-    marked as excluded (November 2026)."""
+    marked as excluded."""
     import matplotlib.pyplot as plt
     import numpy as np
     from matplotlib.patches import Patch

@@ -156,7 +156,7 @@ class ModelParameters:
     afforestation_case: str               # 'irrigated' (lower bound, default) or 'native_rainfed' (upper bound); energy_module.py
     process_abatement_2060: dict            # Abatement share of process emission items in 2060 (linear rise from 2026); energy_module.process_emissions_and_abatement
     process_emissions_frozen_technology: bool  # True: all process items follow real output, no abatement (sensitivity run)
-    hydrogen_cap_2060_mt: float             # Cap on total clean hydrogen in 2060 (Mt H2); 2.9 Mt 2030 and 4 Mt 2035 before (energy_module.hydrogen_cap_gj)
+    hydrogen_cap_2060_mt: float             # Cap on total clean hydrogen in 2060 (Mt H2), after 2.9 Mt in 2030 and 4 Mt in 2035 (energy_module.hydrogen_cap_gj)
     CCS_cost_per_tonne: float               # Cost per tonne of CCS (SAR)
     nature_based_removal_target: float      # Target removal from Nature (Mt)
     # 4. Carbon Market
@@ -189,8 +189,8 @@ class ModelParameters:
     enable_remittances: bool             # Switch: True = project remittances forward; False = remittances stay at zero
     remittances_follow_wage_growth: bool # If True, remittances grow with nominal wage bill growth; if False, grow at calibrated average rate
     remittances_growth_adjustment: float # Manual adjustment to remittances growth rate (additive, e.g. 0.01 = +1pp)
-    r_FDI_repatriation: float            # Rate of return on FDI stock repatriated abroad (primary income outflow, Phase 2)
-    r_gov_ext_assets: float              # Rate of return on government gross external assets (primary income inflow, Phase 2)
+    r_FDI_repatriation: float            # Rate of return on FDI stock repatriated abroad (primary income outflow)
+    r_gov_ext_assets: float              # Rate of return on government gross external assets (primary income inflow)
     max_FDI_income_share: float          # Cap: FDI income repatriation cannot exceed this share of private profits (prevents instability)
     Gov_ext_assets_extraction: float     # Share of Gov_ext_assets_income extracted to Gov_rev; (1-this) reinvested into asset stock (0=full reinvestment, 1=full extraction)
     remittances_saudization_rate: float  # Annual decline in foreign-worker share of remittances (Saudization). 0=no effect, 0.015=1.5%/yr compounding
@@ -315,8 +315,8 @@ class ModelParameters:
             price_floor =                               0.5,
             price_ceiling =                             1,
             price_smooth_factor =                       0.5,        # EMA weight on current cost share: 0.3 = 30% actual cost, 70% smoothed (normal-cost pricing, Kalecki/Lavoie)
-            price_decline_limit =                       0.1,       # Max 10% price decline per period — downward stickiness (administered price theory, Lavoie)
-            Fix_finance_sector_price =                  True,       # Standard: True. Pin financial-sector price to 1 (prevents large drop seen in unconstrained runs). Set False to let the price float freely.
+            price_decline_limit =                       0.1,       # Max 10% price decline per period, downward stickiness (administered price theory, Lavoie)
+            Fix_finance_sector_price =                  True,       # Standard: True. Pin financial-sector price to 1 (otherwise it drops strongly, see model.py). Set False to let the price float freely.
             ####################################################################################################################################################################
             # Energy sector switches and growth rates
             ####################################################################################################################################################################            
@@ -325,12 +325,12 @@ class ModelParameters:
             vision_2030_target_CCU_SGI_Carbon =     True,     # Toggle for the specific Vision 2030 target implementation.
             net_emission_reduction_green_investments_exports_transformation = False,  # Set to True to run the Net Zero 2060 pathway
             vision_2030_renewable_target =          True,      # Set to True for the Vision 2030 scenario, False for the trend scenario
-            gRE_trend_rate =                        0.154,          # No longer used: trend renewables now grow linearly (calibration.py, re_trend_annual_addition_gj).
+            gRE_trend_rate =                        0.154,          # Not used: trend renewables grow linearly (calibration.py, re_trend_annual_addition_gj).
             energy_sector_public_share =            0.8,        # 0.8 (80% public ownership of the energy sector in KSA); set to 0.5 for a more socialized energy sector
             enable_targeted_oil_reduction =         True,      # Oil reduction according to V2030, 95% until 2030 for three sectors (industries, power plant, desalination)
             oil_reduction_target_pct =              0.95,
             oil_reduction_end_t =                   9,          # t=9 corresponds to 2030 (since t=0 is 2021)
-            enable_energy_efficiency_gains =        True,       # Set to True to activate the new logic
+            enable_energy_efficiency_gains =        True,       # Set to True to activate energy efficiency gains
             efficiency_max_reduction_pct =          0.50,       # Maximum reduction is 50%
             efficiency_top_tier_annual_gain =       0.01,       # 1% gain per year for the top-tier sectors
             efficiency_mid_tier_annual_gain =       0.005,      # 0.5% gain per year for the mid-tier sectors
@@ -356,7 +356,7 @@ class ModelParameters:
             # Test the model without growth rates: set almost every switch to False (except Import_pure_adjustment and Limitational_production are TRUE) and adjust all growth factors to zero
             ####################################################################################################################################################################
             Growth_rates_0_test = False,                        # Toggle to test the steady-state solution of the model without any growth rates for model consistency
-            # Note: to activate this test, all time series models must be set to False, and all endogenous mechanisms that might affect external growth rates must be disabled.
+            # to activate this test, all time series models must be set to False, and all endogenous mechanisms that might affect external growth rates must be disabled.
             ####################################################################################################################################################################
             # Water capacity constraints and desalination investment dynamics parameters
             ####################################################################################################################################################################
@@ -434,7 +434,7 @@ class ModelParameters:
             # --- FDI PARAMETERS ---
             enable_FDI = True,               # Enable FDI decomposition in Vision 2030 scenario
             FDI_target = 0.30,              # 30% total FDI growth over vision_2030_timing
-            FDI_follow_domestic_growth = True,   # FDI tracks domestic investment growth + FDI_target on top → increasing FDI share
+            FDI_follow_domestic_growth = True,   # FDI tracks domestic investment growth + FDI_target on top, so the FDI share increases
 
             # --- REMITTANCES & BALANCE OF PAYMENTS ---
             enable_remittances = True,
@@ -454,14 +454,14 @@ class ModelParameters:
             agr_domestic_share_target_year = 10,     # ... by 2030 (t=10)
             agr_increment_crop_share = 0.124,        # 2021 non-fodder crop share of agricultural output
             agr_increment_feed_domestic = 0.3,       # Food-security push grows part of the additional feed domestically
-            agr_livestock_direct_water_intensity = 3.0,  # m3 per 1000 SAR; placeholder, to be verified with MEWA herd/water data
+            agr_livestock_direct_water_intensity = 3.0,  # m3 per 1000 SAR (assumed value)
             agr_water_cap = 0.0,                     # No ceiling: localisation is paid for in water
             agr_diet_demand_side = False,
             agr_price_indexing = True,
             water_supply_capacity_headroom = 0.10,   # Deliveries up to 10% above calibrated desalination/reuse capacity; beyond that, capacity investment is needed
 
             ####################################################################################################################################################################
-            # Not yet implemented — the following switch is defined but has no effect on model computation
+            # Not implemented: the following switch is defined but has no effect on model computation
             ####################################################################################################################################################################
             Productivity_Coefficients_X_adjustment = False,  # Adjusting productivity coefficients to output X vs. Y; not yet implemented
         )

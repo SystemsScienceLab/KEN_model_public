@@ -16,7 +16,7 @@ from IPython.display import display as IPdisplay
 from .utils import string_to_value
 
 
-# ── LaTeX symbol name map ────────────────────────────────────────────────────
+# LaTeX symbol name map
 # Maps internal shorthand names (as used in the +/- symbol strings) to their
 # LaTeX math representations.  Used by `to_latex_symbols()` before export.
 _LATEX_SYMBOL_MAP = {
@@ -53,7 +53,7 @@ _LATEX_SYMBOL_MAP = {
     'ext_bond_service': r'$i^{ext} B^{ext}$',
     'gov_exp_resid':    r'$Gov_{resid}$',
     'I_private':        r'$I_{private}$',
-    'invest_private':   r'$I_{private}$',      # kept for backward compat
+    'invest_private':   r'$I_{private}$',      # alias of I_private
     'retained_earnings':  r'$\Pi_{retained}$',
     'distributed_profits': r'$\Pi_{dist}$',
     'new_loans':        r'$\Delta L^{+}$',
@@ -103,7 +103,7 @@ _LATEX_SYMBOL_MAP = {
     '0':    r'$0$',
 }
 
-# Row index label map: display label → LaTeX label
+# Row index label map: display label -> LaTeX label
 _LATEX_ROW_MAP = {
     # Balance sheet rows
     "Capital (K)":          r"Capital ($K$)",
@@ -192,9 +192,9 @@ def _compute_sector_ofa(report: dict) -> pd.DataFrame:
     """
     Compute cumulative OFA net stocks per BSM sector (5 columns) for all time periods.
 
-    OFA_i(t) = Σ_{s=1}^{t} ΔOFA_i(s),  where ΔOFA_i(s) = -(S/D_i(s) + NLNB_explicit_i(s)).
+    OFA_i(t) = Σ_{s=1}^{t} DeltaOFA_i(s),  where DeltaOFA_i(s) = -(S/D_i(s) + NLNB_explicit_i(s)).
 
-    This is the residual financial instrument that guarantees NLNB = −S/D for every sector
+    This is the residual financial instrument that guarantees NLNB = -S/D for every sector
     in every period, encoding all unmodelled financial complexity (trade credit, interbank
     claims, pension fund shares, repo, etc.) as a single clearing variable.
     TFM Firms (Current) + Firms (Capital) are summed into BSM 'Firms' column.
@@ -263,7 +263,7 @@ def create_balance_sheet(run_report: dict, t: int = -1, display: bool = True):
     pc = run_report["parameters_calibrated"]
     dt = macro.iloc[t]
 
-    # ── Equity residuals (computed from existing stocks, no new model variables) ──
+    # Equity residuals (computed from existing stocks)
     # Capital-weighted public ownership share (from calibration; constant over time).
     # Mirrors the profit split: GP = sum(s_public_ * P). Here applied to the equity stock.
     _s_pub_agg = np.sum(pc.s_public_ * pc.K_) / np.sum(pc.K_)
@@ -272,14 +272,14 @@ def create_balance_sheet(run_report: dict, t: int = -1, display: bool = True):
     # D_HH = sum(L_): HH hold deposits equal to total loans outstanding.
     _D_HH = dt['D_HH']
 
-    # Private firm equity: E_f = K − L − FDI.
-    # With HH deposits (D_HH = L) on the HH side, loans (L) remain as firm liabilities → equity = K − L − FDI.
+    # Private firm equity: E_f = K - L - FDI.
+    # With HH deposits (D_HH = L) on the HH side, loans (L) remain as firm liabilities -> equity = K - L - FDI.
     _E_firm     = dt['K'] - dt['L'] - dt['FDI_net_stock_total']
     _E_firm_HH  = (1.0 - _s_pub_agg) * _E_firm    # Private HH equity claim
     _E_firm_gov = _s_pub_agg           * _E_firm    # Gov equity in public firms (Aramco, utilities, desal)
 
-    # Bank equity: E_b = B^dom − V.
-    # D_HH = L: bank assets = L + B^dom; liabilities = D_HH + V = L + V → equity = B^dom − V (unchanged).
+    # Bank equity: E_b = B^dom - V.
+    # D_HH = L: bank assets = L + B^dom; liabilities = D_HH + V = L + V -> equity = B^dom - V.
     # May be negative when household deposits exceed domestic bond holdings (undercapitalisation signal).
     _E_bank     = dt['Bond_domestic'] - dt['V']
     _E_bank_HH  = (1.0 - pc.gov_bank_share) * _E_bank
@@ -308,25 +308,25 @@ def create_balance_sheet(run_report: dict, t: int = -1, display: bool = True):
 
     rows = [
         "Capital (K)",
-        "HH Portfolio Claims (V)",  # V = HH liquid claims on banks; not purely cash deposits (no endogenous money)
+        "HH Portfolio Claims (V)",  # V = HH liquid claims on banks, distinct from the loan-created deposits D_HH
         "HH Deposits (D_HH)",           # D_HH = L: HH hold deposits equal to total loans outstanding (endogenous money)
         "Loans (L)",
         "Dom Gov Bonds",
         "Ext Gov Bonds",
         "Gov Ext Assets",
         "FDI Net Stock",
-        "Private Firm Equity — HH (E_f,HH)",   # Private HH equity claim = (1 − s_pub) × (K − L − FDI)
-        "Private Firm Equity — Gov (E_f,Gov)",  # Gov equity in public firms = s_pub × (K − L − FDI)  (Aramco, utilities, desal)
-        "Bank Equity (E_b)",                     # E_b = B^dom − V: bank sector net worth, split HH/Gov
+        "Private Firm Equity — HH (E_f,HH)",   # Private HH equity claim = (1 - s_pub) * (K - L - FDI)
+        "Private Firm Equity — Gov (E_f,Gov)",  # Gov equity in public firms = s_pub * (K - L - FDI)  (Aramco, utilities, desal)
+        "Bank Equity (E_b)",                     # E_b = B^dom - V: bank sector net worth, split HH/Gov
     ]
 
     # Symbolic entries: [HH, Firms, Banks, Gov/CB, ROW]
     # ROW holds the mirror position for every open-economy stock so each row sums to 0.
     # Equity rows: HH holds positive equity; Firms/Banks have corresponding negative equity obligations.
     # Ext Gov Bonds: ROW is the creditor (+Bond_ext)
-    # Gov Ext Assets: ROW is the net debtor (−Gov_ext_assets)
+    # Gov Ext Assets: ROW is the net debtor (-Gov_ext_assets)
     # FDI Net Stock: ROW is the investor (+FDI_stock)
-    # HH Deposits: HH asset (+D_HH), Banks liability (−D_HH) — asset counterpart of the Loans row
+    # HH Deposits: HH asset (+D_HH), Banks liability (-D_HH), asset counterpart of the Loans row
     symbols = [
         ["",            "+K",           "",           "",             ""          ],  # Capital (real)
         ["+V",          "",             "-V",         "",             ""          ],  # HH Portfolio Claims
@@ -336,16 +336,16 @@ def create_balance_sheet(run_report: dict, t: int = -1, display: bool = True):
         ["",            "",             "",           "-Bond_ext",    "+Bond_ext" ],  # Ext Bonds
         [""  ,           "",             "",           "+Gov_ext_assets", "-Gov_ext_assets"],  # Gov Ext Assets
         ["",            "-FDI_stock",   "",           "",             "+FDI_stock"],  # FDI Net Stock
-        ["+E_firm_HH",  "-E_firm_HH",   "",           "",             ""          ],  # Priv. Firm Equity HH share → row sums to 0
-        ["",            "-E_firm_gov",  "",           "+E_firm_gov",  ""          ],  # Priv. Firm Equity Gov share (public firms) → row sums to 0
+        ["+E_firm_HH",  "-E_firm_HH",   "",           "",             ""          ],  # Priv. Firm Equity HH share -> row sums to 0
+        ["",            "-E_firm_gov",  "",           "+E_firm_gov",  ""          ],  # Priv. Firm Equity Gov share (public firms) -> row sums to 0
         ["+E_bank_HH",  "",             "-E_bank",    "+E_bank_gov",  ""          ],  # Bank Equity: HH (priv) + Gov (state) own banks
     ]
 
-    # Sum column symbols (row sums — all financial rows = "0"; Capital = "+K")
+    # Sum column symbols (row sums: all financial rows = "0"; Capital = "+K")
     sum_symbols = ["+K", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0"]
 
-    # ── OFA net stocks (cumulative other financial claims per sector) ─────────
-    # Σ OFA_i = 0 by construction (every ΔOFA flow sums to zero across sectors).
+    # OFA net stocks (cumulative other financial claims per sector)
+    # Σ OFA_i = 0 by construction (every DeltaOFA flow sums to zero across sectors).
     ofa_stocks = _compute_sector_ofa(run_report)
     ofa_t = ofa_stocks.iloc[t]
     data['OFA_HH']    = ofa_t['Households']
@@ -415,7 +415,7 @@ def create_transition_matrix(run_report: dict, t: int = -1, display: bool = True
     dt = macro.iloc[t]          # Values at time t
     dtp = macro.iloc[t - 1]     # Values at time t-1
 
-    # ── Direct macro variables ──────────────────────────────────────────────
+    # Direct macro variables
     data = {
         'C':            dt['C'],
         'VAT':          dt['VAT'],
@@ -432,7 +432,7 @@ def create_transition_matrix(run_report: dict, t: int = -1, display: bool = True
         'Tax_wages':    dt['Tax_wages'],
     }
 
-    # ── Computed aggregates ─────────────────────────────────────────────────
+    # Computed aggregates
     data['P_private'] = dt['P'] - dt['GP']
     data['IOT_taxes'] = (dt['Tax_products_net'] + dt['Tax_production']
                          + dt['Tax_investments'])
@@ -440,7 +440,7 @@ def create_transition_matrix(run_report: dict, t: int = -1, display: bool = True
     data['PB_HH']  = (1.0 - pc.gov_bank_share) * dt['PB']
     data['PB_gov'] = pc.gov_bank_share           * dt['PB']
 
-    # ── Flows requiring parameters and lagged values ────────────────────────
+    # Flows requiring parameters and lagged values
     # Interest and repayment flows (using lagged stocks, no circularity)
     data['rm_V'] = pc.rm * dtp['V']                           # Interest paid on deposits (return on HH portfolio claims)
     # Combined: bank profit share to HH + return on HH portfolio claims (V).
@@ -460,7 +460,7 @@ def create_transition_matrix(run_report: dict, t: int = -1, display: bool = True
 
     data['gov_exp_resid'] = pc.gov_exp_resid
 
-    # ── Investment financing ────────────────────────────────────────────────
+    # Investment financing
     # invest_profit: share of DOMESTIC private investment financed by profits (not loans).
     # All computations use I_private_dom (domestically-financed investment) as the base,
     # consistent with the model equation: L_[t] = L_[t-1]*(1-ρ) + I_private_dom*(1-invest_profit).
@@ -471,25 +471,25 @@ def create_transition_matrix(run_report: dict, t: int = -1, display: bool = True
     data['retained_earnings']   = dt['invest_profit'] * dt['I_private_dom']
     # Distributed profits: uses model's explicit P_distributed variable (sum(s_priv*P) - (rl+rho)*L).
     # This is what firms actually transfer to HH after debt service and retained earnings.
-    # The separate 'i on Loans' and 'Loan Repayment' rows show gross Firms→Banks flows;
+    # The separate 'i on Loans' and 'Loan Repayment' rows show gross Firms->Banks flows;
     # together they produce correct bilateral zero-sum rows.
-    # Note: HH S/D in TFM will differ from ΔV by approximately (VAT + remittances) because
+    # HH S/D in TFM will differ from DeltaV by approximately (VAT + remittances) because
     # those flows appear in TFM current rows for HH but are not deducted in the V equation.
     data['distributed_profits'] = dt['P_distributed'] - data['retained_earnings']
-    # New loans: the loan-financed portion of domestic private investment (fixes prior use of I_private)
+    # New loans: the loan-financed portion of domestic private investment (I_private_dom)
     data['new_loans'] = (1 - dt['invest_profit']) * dt['I_private_dom']
 
-    # ── Stock changes ───────────────────────────────────────────────────────
+    # Stock changes
     data['DeltaV'] = dt['V'] - dtp['V']
     data['DeltaBond_dom'] = dt['Bond_domestic'] - dtp['Bond_domestic']
     data['DeltaBond_ext'] = dt['Bond_external'] - dtp['Bond_external']
     data['DeltaGov_ext_assets'] = dt['Gov_ext_assets'] - dtp['Gov_ext_assets']
 
-    # HH deposit change: ΔD_HH = ΔL (endogenous money: HH acquires deposit asset as loans expand/contract).
-    # D_HH = L, so ΔD_HH = new_loans − rho_L. Shown as an explicit TFM row (HH acquires/reduces deposit asset).
+    # HH deposit change: DeltaD_HH = DeltaL (endogenous money: HH acquires deposit asset as loans expand/contract).
+    # D_HH = L, so DeltaD_HH = new_loans - rho_L. Shown as an explicit TFM row (HH acquires/reduces deposit asset).
     data['DeltaD_HH'] = dt['D_HH'] - dtp['D_HH']
 
-    # Firm equity changes: stock-based Δ(K − FDI), split by capital-weighted public ownership share.
+    # Firm equity changes: stock-based Delta(K - FDI), split by capital-weighted public ownership share.
     # These are the economically meaningful values; the statistical discrepancy is left to emerge
     # naturally from the model flows rather than being forced to zero by a residual.
     _s_pub_agg_tfm = np.sum(pc.s_public_ * pc.K_) / np.sum(pc.K_)
@@ -498,25 +498,25 @@ def create_transition_matrix(run_report: dict, t: int = -1, display: bool = True
     data['DeltaE_firm_HH']  = (1.0 - _s_pub_agg_tfm) * _DeltaE_total
     data['DeltaE_firm_gov'] = _s_pub_agg_tfm           * _DeltaE_total
 
-    # ── BoP / international flows ───────────────────────────────────────────
-    # FDI net inflow: foreign equity entering Saudi firms (ROW → Firms)
+    # BoP / international flows
+    # FDI net inflow: foreign equity entering Saudi firms (ROW -> Firms)
     data['FDI_net'] = dt['FDI_net_total']
 
-    # Gov PIF investment: fiscal surplus invested abroad (Gov → ROW)
+    # Gov PIF investment: fiscal surplus invested abroad (Gov -> ROW)
     data['Gov_pif'] = dt['Gov_pif_investment']
-    # ── BoP income flows ────────────────────────────────────────────────────
-    # FDI income repatriation: foreign investors' share of private profits leaving Saudi (HH → ROW).
+    # BoP income flows
+    # FDI income repatriation: foreign investors' share of private profits leaving Saudi (HH -> ROW).
     # Deducted from v.YD_profit in the model; full amount stored in v.FDI_income_payments.
     data['FDI_income'] = dt['FDI_income_payments']
 
-    # Remittances: foreign workers send earnings abroad (HH → ROW).
+    # Remittances: foreign workers send earnings abroad (HH -> ROW).
     data['remittances'] = dt['remittances']
 
-    # Gov ext asset income: Saudi Government earns investment returns on PIF/SAMA foreign assets (ROW → Gov).
+    # Gov ext asset income: Saudi Government earns investment returns on PIF/SAMA foreign assets (ROW -> Gov).
     # Full amount shown (consistent with how it enters primary_income_balance in the BoP).
     data['Gov_ext_assets_income'] = dt['Gov_ext_assets_income']
-    # ── Production adjustment ───────────────────────────────────────────────
-    # Gap between demand-side Y and production-side value added (X − IntP).
+    # Production adjustment
+    # Gap between demand-side Y and production-side value added (X - IntP).
     # Arises from agricultural sector modifications and supply constraints.
     value_added = dt['X'] - dt['IntP']
     Y_demand = dt['C'] + dt['GY'] + dt['I_total'] + dt['EX'] - dt['IM']
@@ -524,16 +524,16 @@ def create_transition_matrix(run_report: dict, t: int = -1, display: bool = True
     data['prod_adj_realized'] = Y_realized - value_added
     data['prod_adj_demand'] = value_added - Y_demand  # negative when Y > VA
 
-    # ── Matrix structure ────────────────────────────────────────────────────
+    # Matrix structure
     # Firms are split into two sub-accounts following SFC convention:
     #   Firms (Current): all income and expenditure flows; net = retained earnings
     #   Firms (Capital): investment expenditure financed by retained earnings + loans + FDI equity
     columns = ["Households", "Firms (Current)", "Firms (Capital)", "Banks", "Government", "ROW"]
 
-    # ── Section 1: Cash-flow rows (income, expenditure, transfers) ──────────
-    # ── Section 2: Changes in financial assets ──────────────────────────────
+    # Section 1: Cash-flow rows (income, expenditure, transfers)
+    # Section 2: Changes in financial assets
     rows = [
-        # ── Section 1: Cash flows ───────────────────────────────────────────
+        # Section 1: Cash flows
         "Consumption",
         "VAT",
         "Gov Consumption",
@@ -543,10 +543,10 @@ def create_transition_matrix(run_report: dict, t: int = -1, display: bool = True
         "Exports",
         "Imports",
         "Wages",
-        "Distributed Profits",         # Private profits net of debt service paid to HH (= P_distributed − retained_earnings)
-        "Retained Earnings",           # Internal Firms (Current) → Firms (Capital) transfer
+        "Distributed Profits",         # Private profits net of debt service paid to HH (= P_distributed - retained_earnings)
+        "Retained Earnings",           # Internal Firms (Current) -> Firms (Capital) transfer
         "Gov Profits",
-        "Bank Profits + return to HH portfolio claims",  # Combined: (PB_HH + rm*V) → HH, PB_gov → Gov, (PB + rm*V) from Banks
+        "Bank Profits + return to HH portfolio claims",  # Combined: (PB_HH + rm*V) -> HH, PB_gov -> Gov, (PB + rm*V) from Banks
         "Household Tax (TH)",
         "Tax on Profits",
         "Tax on Wages",
@@ -560,28 +560,28 @@ def create_transition_matrix(run_report: dict, t: int = -1, display: bool = True
         "Gov Exp Residual",
         "Production Adj. realized",
         "Production Adj. demand",
-        # ── Section 2: Changes in financial assets ──────────────────────────
+        # Section 2: Changes in financial assets
         "New Loans",                   # Firms (Capital) borrows from Banks
         "Loan Repayment",              # Firms (Capital) repays principal to Banks
-        "Change in HH Deposits (ΔD_HH)",  # HH acquires/reduces deposit asset = ΔL (endogenous money: ΔD_HH = new_loans − rho_L)
-        "Change in Household Wealth (V)",  # NOTE: V = HH portfolio wealth; includes revaluation effects beyond new loans — residual captured via equity rows below
+        "Change in HH Deposits (ΔD_HH)",  # HH acquires/reduces deposit asset = DeltaL (endogenous money: DeltaD_HH = new_loans - rho_L)
+        "Change in Household Wealth (V)",  # V = HH portfolio wealth, includes revaluation effects beyond new loans (residual captured via equity rows below)
         "Change in Dom. Bonds",
         "Change in Ext. Bonds",
-        "Priv. Investment (FDI from RoW)",  # Equity inflow to Firms (Capital) from ROW — finances FDI-funded portion of private investment
+        "Priv. Investment (FDI from RoW)",  # Equity inflow to Firms (Capital) from ROW: finances FDI-funded portion of private investment
         "Change in Gov Ext Assets",
-        "Gov PIF Investment",          # Gov acquires foreign assets → financial account (asset acquisition)
-        "Change in Firm Equity — HH (ΔE_f,HH) [incl. revaluation]",   # HH equity residual: forces HH S/D + NLNB = 0; diff from Δ(K−FDI) = implicit revaluation
+        "Gov PIF Investment",          # Gov acquires foreign assets -> financial account (asset acquisition)
+        "Change in Firm Equity — HH (ΔE_f,HH) [incl. revaluation]",   # HH equity residual: forces HH S/D + NLNB = 0; diff from Delta(K-FDI) = implicit revaluation
         "Change in Firm Equity — Gov (ΔE_f,Gov) [incl. revaluation]",  # Gov equity residual: forces Gov S/D + NLNB = 0
     ]
 
     # Each inner list: [Households, Firms (Current), Firms (Capital), Banks, Government, ROW]
     symbols = [
-        # ── Section 1: Cash flows ──────────────────────────────────────────────────────────────────────────────────────────────
+        # Section 1: Cash flows
         ["-C",                    "+C",                    "",                      "",                      "",                      ""                   ],  # Consumption
         ["-VAT",                  "",                      "",                      "",                      "+VAT",                  ""                   ],  # VAT
         ["",                      "+GY",                   "",                      "",                      "-GY",                   ""                   ],  # Gov Consumption
         ["",                      "+Sub",                  "",                      "",                      "-Sub",                  ""                   ],  # Gov Subsidies
-        ["",                      "+I_private_dom",         "-I_private_dom",         "",                      "",                      ""                   ],  # Priv. Investment (dom. financed) — uses I_private_dom (domestically-financed share)
+        ["",                      "+I_private_dom",         "-I_private_dom",         "",                      "",                      ""                   ],  # Priv. Investment (dom. financed): uses I_private_dom (domestically-financed share)
         ["",                      "+GI",                   "",                      "",                      "-GI",                   ""                   ],  # Gov Investment
         ["",                      "+EX",                   "",                      "",                      "",                      "-EX"                ],  # Exports
         ["",                      "-IM",                   "",                      "",                      "",                      "+IM"                ],  # Imports
@@ -589,7 +589,7 @@ def create_transition_matrix(run_report: dict, t: int = -1, display: bool = True
         ["+distributed_profits",  "-distributed_profits",  "",                      "",                      "",                      ""                   ],  # Distributed Profits
         ["",                      "-retained_earnings",    "+retained_earnings",    "",                      "",                      ""                   ],  # Retained Earnings
         ["",                      "-GP",                   "",                      "",                      "+GP",                   ""                   ],  # Gov Profits
-        ["+PB_HH_rm_V",           "",                      "",                      "-PB_rm_V",              "+PB_gov",               ""                   ],  # Bank Profits + rm*V: (PB_HH+rm*V)→HH, (PB+rm*V) from Banks, PB_gov→Gov (row sums to 0)
+        ["+PB_HH_rm_V",           "",                      "",                      "-PB_rm_V",              "+PB_gov",               ""                   ],  # Bank Profits + rm*V: (PB_HH+rm*V)->HH, (PB+rm*V) from Banks, PB_gov->Gov (row sums to 0)
         ["-TH",                   "",                      "",                      "",                      "+TH",                   ""                   ],  # Household Tax (TH)
         ["-Tax_profits",          "",                      "",                      "",                      "+Tax_profits",          ""                   ],  # Tax on Profits
         ["-Tax_wages",            "",                      "",                      "",                      "+Tax_wages",            ""                   ],  # Tax on Wages
@@ -603,26 +603,26 @@ def create_transition_matrix(run_report: dict, t: int = -1, display: bool = True
         ["+gov_exp_resid",        "",                      "",                      "",                      "-gov_exp_resid",        ""                   ],  # Gov Exp Residual
         ["",                      "+prod_adj_realized",    "",                      "",                      "",                      ""                   ],  # Production Adj. realized
         ["",                      "+prod_adj_demand",      "",                      "",                      "",                      ""                   ],  # Production Adj. demand
-        # ── Section 2: Changes in financial assets ─────────────────────────────────────────────────────────────────────────────
+        # Section 2: Changes in financial assets
         ["",                      "",                      "+new_loans",            "-new_loans",            "",                      ""                   ],  # New Loans
         ["",                      "",                      "-rho_L",                "+rho_L",                "",                      ""                   ],  # Loan Repayment
-        ["-DeltaD_HH",            "",                      "",                      "+DeltaD_HH",            "",                      ""                   ],  # Change in HH deposits: HH acquires asset (−), Banks issue liability (+)
-        ["-DeltaV",               "",                      "",                      "+DeltaV",               "",                      ""                   ],  # Change in household wealth (V) — tracks ΔV stock; Banks column shows counterpart asset change
+        ["-DeltaD_HH",            "",                      "",                      "+DeltaD_HH",            "",                      ""                   ],  # Change in HH deposits: HH acquires asset (-), Banks issue liability (+)
+        ["-DeltaV",               "",                      "",                      "+DeltaV",               "",                      ""                   ],  # Change in household wealth (V): tracks DeltaV stock; Banks column shows counterpart asset change
         ["",                      "",                      "",                      "+DeltaBond_dom",        "-DeltaBond_dom",        ""                   ],  # Change in Dom. Bonds
         ["",                      "",                      "",                      "",                      "-DeltaBond_ext",        "+DeltaBond_ext"     ],  # Change in Ext. Bonds
         ["",                      "",                      "+FDI_net",              "",                      "",                      "-FDI_net"           ],  # Priv. Investment (FDI from RoW)
         ["",                      "",                      "",                      "",                      "-DeltaGov_ext_assets",   "+DeltaGov_ext_assets"   ],  # Change in Gov Ext Assets
         ["",                      "",                      "",                      "",                      "-Gov_pif",              "+Gov_pif"           ],  # Gov PIF = asset acquisition (financial account)
-        ["+DeltaE_firm_HH",       "",                      "-DeltaE_firm_HH",       "",                      "",                      ""                   ],  # Firm Equity HH: HH(+HH share), Firms(Capital)(−HH share) → row sums to 0
-        ["",                      "",                      "-DeltaE_firm_gov",      "",                      "+DeltaE_firm_gov",      ""                   ],  # Firm Equity Gov: Firms(Capital)(−gov share), Gov(+gov share) → row sums to 0
+        ["+DeltaE_firm_HH",       "",                      "-DeltaE_firm_HH",       "",                      "",                      ""                   ],  # Firm Equity HH: HH(+HH share), Firms(Capital)(-HH share) -> row sums to 0
+        ["",                      "",                      "-DeltaE_firm_gov",      "",                      "+DeltaE_firm_gov",      ""                   ],  # Firm Equity Gov: Firms(Capital)(-gov share), Gov(+gov share) -> row sums to 0
     ]
 
-    # ── Build matrix ─────────────────────────────────────────────────────────
+    # Build matrix
     numeric = [[string_to_value(s, data) for s in row] for row in symbols]
     transition_matrix_symbols = pd.DataFrame(symbols, columns=columns, index=rows)
     transition_matrix = pd.DataFrame(numeric, columns=columns, index=rows)
 
-    # ── Balancing adjustment ──────────────────────────────────────────────────
+    # Balancing adjustment
     # The TFM must sum to zero globally (every payment has a counterpart).
     # In practice the "Production Adj." rows are one-sided (only the Firms
     # cell is non-zero), so we absorb any residual into that catch-all row.
@@ -631,26 +631,26 @@ def create_transition_matrix(run_report: dict, t: int = -1, display: bool = True
     pa_row = "Production Adj. realized"
     transition_matrix.at[pa_row, columns[firms_col]] -= global_flow_sum
 
-    # ── Section boundaries ──────────────────────────────────────────────────
+    # Section boundaries
     cf_last = "Production Adj. demand"          # last cash-flow row
     fin_first = "New Loans"                      # first financial-changes row
     cf_rows = rows[: rows.index(cf_last) + 1]
     fin_rows = rows[rows.index(fin_first):]
 
-    # ── Computed summary rows ───────────────────────────────────────────────
+    # Computed summary rows
     # Surplus/Deficit: column sum of cash-flow section (positive = surplus)
     surplus_deficit = transition_matrix.loc[cf_rows, columns].sum(axis=0)
 
     # NLNB (explicit, before OFA): column sum of explicitly-modelled financial rows.
     _nlnb_explicit = transition_matrix.loc[fin_rows, columns].sum(axis=0)
 
-    # ── Other Financial Assets (OFA): residual SFC clearing instrument ───────
-    # For every sector: ΔOFA_i = -(S/D_i + NLNB_explicit_i)
+    # Other Financial Assets (OFA): residual SFC clearing instrument
+    # For every sector: DeltaOFA_i = -(S/D_i + NLNB_explicit_i)
     # This guarantees NLNB = -S/D identically for all sectors.
     # Post-Keynesian rationale: endogenous money and circuit theory guarantee
     # that every financing gap is covered by some financial instrument; OFA
     # represents all unmodelled instruments (trade credit, interbank claims,
-    # pension fund shares, repo, etc.).  Σ ΔOFA_i = 0 (global flow balance).
+    # pension fund shares, repo, etc.).  Σ DeltaOFA_i = 0 (global flow balance).
     _OFA_ROW_LABEL = 'Change in Other Financial Assets (OFA) (\u0394OFA)'
     _delta_ofa = -(surplus_deficit + _nlnb_explicit)
     transition_matrix.loc[_OFA_ROW_LABEL, columns] = _delta_ofa.values
@@ -658,11 +658,11 @@ def create_transition_matrix(run_report: dict, t: int = -1, display: bool = True
         '+DOFA_HH', '+DOFA_FC', '+DOFA_FK', '+DOFA_Banks', '+DOFA_Gov', '+DOFA_ROW']
     fin_rows_incl_ofa = fin_rows + [_OFA_ROW_LABEL]
 
-    # NLNB (including OFA) = _nlnb_explicit + ΔOFA = -S/D ✓
+    # NLNB (including OFA) = _nlnb_explicit + DeltaOFA = -S/D
     _NLNB_LABEL = 'Net Lending/Borrowing (NLNB) [\u2212 net lending, + net borrowing]'
     nlnb_values = transition_matrix.loc[fin_rows_incl_ofa, columns].sum(axis=0)
 
-    # ── Assign computed rows ────────────────────────────────────────────────
+    # Assign computed rows
     transition_matrix.loc['Surplus/Deficit (S/D)', columns] = surplus_deficit.values
     transition_matrix.loc[_NLNB_LABEL, columns] = nlnb_values.values
 
@@ -670,21 +670,21 @@ def create_transition_matrix(run_report: dict, t: int = -1, display: bool = True
     transition_matrix_symbols.loc[_NLNB_LABEL, columns] = 'NLNB'
 
     # Statistical Discrepancy: S/D + NLNB = 0 everywhere after OFA row is included.
-    # Retained as a diagnostic row — all values should display as zero.
+    # Diagnostic row: all values are zero if the matrix is consistent.
     _STAT_DISC_LABEL = 'Statistical Discrepancy'
     stat_disc_values = surplus_deficit.values + nlnb_values.values
     transition_matrix.loc[_STAT_DISC_LABEL, columns] = stat_disc_values
     transition_matrix_symbols.loc[_STAT_DISC_LABEL, columns] = 'StatDisc'
 
-    # ── Reorder: S/D | financial rows | OFA row | NLNB | Stat. Discrepancy ──
+    # Reorder: S/D | financial rows | OFA row | NLNB | Stat. Discrepancy
     final_order = cf_rows + ['Surplus/Deficit (S/D)'] + fin_rows + [_OFA_ROW_LABEL, _NLNB_LABEL, _STAT_DISC_LABEL]
     transition_matrix        = transition_matrix.reindex(final_order)
     transition_matrix_symbols = transition_matrix_symbols.reindex(final_order, fill_value='')
 
-    # ── Row sums ────────────────────────────────────────────────────────────
+    # Row sums
     transition_matrix['Sum'] = transition_matrix[columns].sum(axis=1)
 
-    # ── Symbol Sum column ───────────────────────────────────────────────────
+    # Symbol Sum column
     transition_matrix_symbols['Sum'] = ''
     transition_matrix_symbols.loc['Surplus/Deficit (S/D)', 'Sum'] = '0'
     transition_matrix_symbols.loc[_OFA_ROW_LABEL, 'Sum'] = '0'

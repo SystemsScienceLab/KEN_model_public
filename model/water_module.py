@@ -92,7 +92,7 @@ def generate_population(start_year, end_year, growth_rate):
     # Calculate directly: P_t = P_base * (1 + g)^(t - base)
     for year in range(start_year, end_year + 1):
         # Calculate relative to base year
-        # If year < base_year, the exponent is negative, which correctly "reverse grows" the population
+        # If year < base_year, the exponent is negative and the population is projected backwards
         pop_data[year] = base_pop * ((1 + growth_rate) ** (year - base_year))
             
     return pop_data
@@ -218,9 +218,8 @@ def step2_calculate_production(df_consumption, df_ssr):
         
         # Get SSR (Forward Fill)
         ssr = get_value_with_fallback(year, crop, df_ssr)
-        # Blank SSR cells mean no domestic production. NaN rows were already dropped from the
-        # yearly sums, so this makes the treatment explicit. (Wheat in the Vision 2030 and
-        # Transformation files: 0.31 to 2026, linear phase-out to 0 in 2034, November 2026.)
+        # Blank SSR cells mean no domestic production. (Wheat in the Vision 2030 and
+        # Transformation files: 0.31 to 2026, linear phase-out to 0 in 2034.)
         if pd.isna(ssr):
             ssr = 0.0
 
@@ -346,7 +345,7 @@ def step4_calculate_metrics(df_production_split, yield_map, bwf_map, output_valu
             # Subsidy = Investment * Rate
             subsidy_sar = 0.0
             if tech == "Drip":
-                # REFINED LOGIC: 
+                # Subsidy rate:
                 # 2021 uses historical subsidy rate (0.45) for all scenarios.
                 # 2022+ uses scenario-specific rate.
                 if year == 2021:
@@ -514,7 +513,7 @@ def get_agr_data(scenario_name, start_year=2021, end_year=2065, population_growt
     ].sum()
     
     
-    # --- New Logic for Livestock Water Use ---
+    # --- Livestock Water Use ---
     # 1. Calculate Crops Data (Bottom-up)
     crop_X_dict = summary_sector["Total_Output_1000SAR"].to_dict() # {Year: Value}
     crop_water_dict = summary_sector["Withdrawal_m3"].to_dict()   # {Year: Value}
@@ -531,12 +530,12 @@ def get_agr_data(scenario_name, start_year=2021, end_year=2065, population_growt
         raise ValueError(
             "get_agr_data requires total_output_2021_iot (the 2021 IOT total output, "
             "1000 SAR, for the combined 'Crop and animal production...' sector) to "
-            "derive the crop/livestock split — pass pc.X_[pc.agr_sector]."
+            "derive the crop/livestock split. Pass pc.X_[pc.agr_sector]."
         )
 
     # Calculate 2021 Livestock Values
     # Crop's share of the combined sector's 2021 total output, derived from the base-year
-    # IO table (instead of a hardcoded literal), so the crop+livestock split reconciles
+    # IO table, so the crop+livestock split reconciles
     # exactly with the IOT's combined-sector total output in 2021. This share is then held
     # fixed for all years (see loop below).
     crop_share_2021 = crop_output_2021 / total_output_2021_iot if crop_output_2021 > 0 else 0.0
@@ -555,7 +554,7 @@ def get_agr_data(scenario_name, start_year=2021, end_year=2065, population_growt
     agr_water_use_intensity = {}
     agr_water_base = {}
 
-    # Note: Total Agr Output = Crop + Livestock, but the returned `crop_X` is Crop Output only.
+    # Total Agr Output = Crop + Livestock, but the returned `crop_X` is Crop Output only.
     # The return value `crop_X` is used in calibration.py to set `self.crop_X` and then derive `AGR_X`.
     # So `crop_X` MUST remain Crop Output.
     # The INTENSITY however, must be (Total Water / Total Output).
@@ -580,7 +579,7 @@ def get_agr_data(scenario_name, start_year=2021, end_year=2065, population_growt
         else:
             agr_water_use_intensity[year] = 0.0
 
-    # New Cost Outputs (Dictionaries {Year: Value})
+    # Cost Outputs (Dictionaries {Year: Value})
     agr_irrigation_invest = summary_sector["Investment_Cost_SAR"].to_dict()
     agr_irrigation_om = summary_sector["OM_Cost_SAR"].to_dict()
     agr_irrigation_subsidy = summary_sector["Subsidy_SAR"].to_dict()
@@ -677,17 +676,17 @@ def calculate_water_demand(v, p, pc, t):
     # intensity on the current agricultural output so that the rest of the module is unchanged.
     # Sectoral water use follows REAL gross output (2021 prices), not nominal output X: the intensities
     # are m3 per unit of 2021 output, so nominal output would let water use grow with the price level.
-    # Correction of November 2026; see utils.real_output_2021_prices.
+    # See utils.real_output_2021_prices.
     x_real_ = real_output_2021_prices(v, t)
     # Agricultural water comes from the bottom-up crop accounting (m3). Its intensity series
     # pc.agr_water_use_intensity is defined on the accounting's own output path, so it is converted
-    # here to an intensity on real output; agricultural water itself is unchanged by the correction.
+    # here to an intensity on real output; agricultural water itself is unchanged by this conversion.
     if x_real_[pc.agr_sector] > 0:
         v.water_use_intensities_[t][pc.agr_sector] *= v.X_[t][pc.agr_sector] / x_real_[pc.agr_sector]
     if getattr(p, "agr_valuechain_coupling", False) and x_real_[pc.agr_sector] > 0 and v.agr_water_total[t] > 0:
         v.water_use_intensities_[t][pc.agr_sector] = v.agr_water_total[t] / x_real_[pc.agr_sector]
 
-    # FIX: Zero out other agricultural sectors (Forestry & Fishing) to prevent double counting
+    # Zero out other agricultural sectors (Forestry & Fishing) to prevent double counting
     # The calibrated total water (10.8 b) is assigned to pc.agr_sector (0).
     # Summing indices 0-3 (Crop, Forestry, Fishing) would otherwise exceed the target.
     agr_indices = [0, 1, 2]
@@ -843,15 +842,14 @@ def ras_balance(matrix, row_totals, col_totals, max_iter=50, tol=1e-4):
 def water_accounting(v: "ModelVariables", p: "ModelParameters", pc: "ParametersCalibrated", t: int, verbose: bool = False):
     """
     Unified water module to handle water use accounting and supply mix calculation.
-    Transferred from model.py to maintain modularity.
-    Refactored to use RAS (Bi-proportional) allocation based on Demand Structure Targets.
+    Uses RAS (bi-proportional) allocation based on demand structure targets.
     """
     import numpy as np
     
     # 1. Calculate Demand
     water_use_sectoral = calculate_water_demand(v, p, pc, t)
     
-    # 2. Calculate Aggregate Supply Mix (Fixes Column Totals)
+    # 2. Calculate Aggregate Supply Mix (sets column totals)
     calculate_aggregate_supply_mix(v, pc, t, p)
     
     # 3. Prepare RAS Inputs
@@ -866,7 +864,7 @@ def water_accounting(v: "ModelVariables", p: "ModelParameters", pc: "ParametersC
     row_totals = np.array([demands_dict[k] for k in sectors_order])
     
     # 3.2 Column Totals (Source Supplies)
-    # Note: GW is calculated as residual in calculate_aggregate_supply_mix, 
+    # GW is calculated as residual in calculate_aggregate_supply_mix,
     # ensuring sum(Supplies) == sum(Demands)
     supplies_dict = {
         "desal": v.water_use_desal_tot[t],
@@ -977,7 +975,7 @@ def compute_agr_supply(v: "ModelVariables", p: "ModelParameters", pc: "Parameter
     Agricultural output has three components, all in 2021 prices:
       1. Crops, from the bottom-up crop module (population x per-capita demand x SSR).
       2. Non-crop output (mainly livestock, 83% of the sector in 2021), growing with population
-         and the scenario's diet factor. It is no longer tied to crop output, so a fodder phase-out
+         and the scenario's diet factor. It is not tied to crop output, so a fodder phase-out
          (feed imported) does not mechanically cut livestock output.
       3. A value-chain increment: a domestic sourcing share delta of the intermediate demand of
          all other sectors for agricultural goods (food processing, food services, accommodation,
@@ -1134,7 +1132,7 @@ def apply_irrigation_costs(v, pc, t):
         v.Sub_production_[t][pc.agr_sector] += sub_irrigation
         
         # Re-calculate Profits after Subsidy and O&M adjustments
-        # Note: v.P_ was already calculated before this function check in model.py.
+        # v.P_ was already calculated before this function check in model.py.
         # We need to explicitly update it to reflect the changes in Sub_production and the direct O&M cost deduction.
         # Logic: P_new = P_old - O&M + Subsidy_new_part
         # Subsidy is part of Revenue for the firm.

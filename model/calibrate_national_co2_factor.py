@@ -1,3 +1,15 @@
+# =============================================================================
+# Lead model conceptualization and development (theory, methodology, and
+# implementation), software architecture & model coding (all components),
+# data acquisition & processing, team supervision: Michael Miess
+# Initial software architecture development, first coding, technical consulting:
+# Joel Foramitti
+# Lead of energy modeling: Ansir Ilyas
+# Lead of water modeling: Dan Wang
+# Model consulting & support: Asjad Naqvi
+# Project conceptualization, funding & supervision: Yoshihide Wada
+# =============================================================================
+
 """Fit the two common scaling factors of the energy calibration (calibration.py, section 5.5b).
 
 1. ParametersCalibrated.NATIONAL_CO2_SCALING_FACTOR: scales the oil and gas intensities of the non-power
@@ -12,7 +24,7 @@ Both factors are fitted on the Baseline and are the same in all scenarios. Becau
 calibration of energy-efficiency costs and investment, the fit is repeated a few times until it is stable.
 
 Run from the repository root:  python -m model.calibrate_national_co2_factor
-Then copy the printed factors into calibration.py.
+The printed factors are the values of the two constants in calibration.py.
 """
 import warnings
 import numpy as np

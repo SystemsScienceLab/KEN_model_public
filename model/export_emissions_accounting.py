@@ -1,3 +1,15 @@
+# =============================================================================
+# Lead model conceptualization and development (theory, methodology, and
+# implementation), software architecture & model coding (all components),
+# data acquisition & processing, team supervision: Michael Miess
+# Initial software architecture development, first coding, technical consulting:
+# Joel Foramitti
+# Lead of energy modeling: Ansir Ilyas
+# Lead of water modeling: Dan Wang
+# Model consulting & support: Asjad Naqvi
+# Project conceptualization, funding & supervision: Yoshihide Wada
+# =============================================================================
+
 """
 Emissions embodied in exported crude oil: accounting extension outside the model.
 
@@ -90,7 +102,7 @@ def compute(results):
             # nominal crude exports, so that baseline export volume stays at its 2021 level
             "Real oil price +1.2%/yr, 1990-2023 trend (lower bound)": EX / p_crude / (1 + REAL_OIL_PRICE_TREND) ** (t - 1) / EX_crude_2021,
             "Oil price follows baseline nominal exports": EX / EX_baseline,
-            "Previous convention: crude + refined, own-2021 anchor": ex_macro / ex_macro[0],
+            "Alternative convention: crude + refined, own-2021 anchor": ex_macro / ex_macro[0],
         }
         variants[sc] = {k: x * gt_2021 for k, x in v.items()}
         paths[sc] = variants[sc]["Central: crude sector price"]

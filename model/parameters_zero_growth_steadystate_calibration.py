@@ -41,8 +41,8 @@ class ModelParameters:
     investment_reduction_factor: float      # Factor for reducing investment growth rate if investment exceeds certain threshold
     Investment_exog_semi_endog_correction: bool   # Semi-endogenize exogenous investment trend via Keynesian macro signals (gov deficit + profit rate)
     I_correction_gov_deficit_threshold: float     # Gov deficit-to-GDP ratio above which investment dampening begins (e.g. 0.05 = 5% of GDP)
-    I_correction_gov_deficit_sensitivity: float   # Strength of gov-deficit crowding-out signal (e.g. 2.0 → each 1pp excess deficit cuts gI_trend by 2pp)
-    I_correction_profit_sensitivity: float        # Strength of profit-rate-decline signal (e.g. 2.0 → each 1pp fall in P/Y below initial level cuts gI_trend by 2pp)
+    I_correction_gov_deficit_sensitivity: float   # Strength of gov-deficit crowding-out signal (e.g. 2.0: each 1pp excess deficit cuts gI_trend by 2pp)
+    I_correction_profit_sensitivity: float        # Strength of profit-rate-decline signal (e.g. 2.0: each 1pp fall in P/Y below initial level cuts gI_trend by 2pp)
     Investment_distribution_Y_based: bool  # Toggle between distributing investment according to sectoral output Y shares or TOTAL output X  stock shares
     Endogenous_excess_import_reduction: bool # Set to true if you endogenously want to reduce imports mirroring directed industrial policy by the Saudi government
     import_reduction_investment_effectivity_factor: float  # Factor for the effectivity of investment growth due to import reduction
@@ -161,7 +161,7 @@ class ModelParameters:
     afforestation_case: str               # 'irrigated' (lower bound, default) or 'native_rainfed' (upper bound); energy_module.py
     process_abatement_2060: dict            # Abatement share of process emission items in 2060 (linear rise from 2026); energy_module.process_emissions_and_abatement
     process_emissions_frozen_technology: bool  # True: all process items follow real output, no abatement (sensitivity run)
-    hydrogen_cap_2060_mt: float             # Cap on total clean hydrogen in 2060 (Mt H2); 2.9 Mt 2030 and 4 Mt 2035 before (energy_module.hydrogen_cap_gj)
+    hydrogen_cap_2060_mt: float             # Cap on total clean hydrogen in 2060 (Mt H2), after 2.9 Mt in 2030 and 4 Mt in 2035 (energy_module.hydrogen_cap_gj)
     CCS_cost_per_tonne: float               # Cost per tonne of CCS (SAR)
     nature_based_removal_target: float      # Target removal from Nature (Mt)
     # 4. Carbon Market
@@ -194,8 +194,8 @@ class ModelParameters:
     enable_remittances: bool             # Switch: True = project remittances forward; False = remittances stay at zero
     remittances_follow_wage_growth: bool # If True, remittances grow with nominal wage bill growth; if False, grow at calibrated average rate
     remittances_growth_adjustment: float # Manual adjustment to remittances growth rate (additive, e.g. 0.01 = +1pp)
-    r_FDI_repatriation: float            # Rate of return on FDI stock repatriated abroad (primary income outflow, Phase 2)
-    r_gov_ext_assets: float              # Rate of return on government gross external assets (primary income inflow, Phase 2)
+    r_FDI_repatriation: float            # Rate of return on FDI stock repatriated abroad (primary income outflow)
+    r_gov_ext_assets: float              # Rate of return on government gross external assets (primary income inflow)
     max_FDI_income_share: float          # Cap: FDI income repatriation cannot exceed this share of private profits (prevents instability)
     Gov_ext_assets_extraction: float     # Share of Gov_ext_assets_income extracted to Gov_rev; (1-this) reinvested into asset stock (0=full reinvestment, 1=full extraction)
     remittances_saudization_rate: float  # Annual decline in foreign-worker share of remittances (Saudization). 0=no effect, 0.015=1.5%/yr compounding
@@ -236,9 +236,9 @@ class ModelParameters:
             investment_reduction_factor =           0,        # Standard value: 0.9, i.e. reduce average investment growth rate by (1 - parameter.value) if investment exceeds certain threshold
             # Semi-endogenous Keynesian dampening when Endogenous_investment = False
             Investment_exog_semi_endog_correction = False,        # True = apply Keynesian macro dampening to exogenous gI_trend in baseline
-            I_correction_gov_deficit_threshold    = 0.,        # 2% of GDP deficit is the trigger threshold
-            I_correction_gov_deficit_sensitivity  = 0,         # Each 1pp excess deficit above threshold reduces gI_trend by 2.5pp
-            I_correction_profit_sensitivity       = 0,         # Each 1pp fall in profit rate (P/Y) below initial level reduces gI_trend by 2pp
+            I_correction_gov_deficit_threshold    = 0.,        # Deficit threshold as share of GDP (correction off in the steady-state run)
+            I_correction_gov_deficit_sensitivity  = 0,         # Reduction of gI_trend per 1pp excess deficit (0: off)
+            I_correction_profit_sensitivity       = 0,         # Reduction of gI_trend per 1pp fall in profit rate below initial level (0: off)
             Endogenous_A_matrix =                   False,       # Toggle between an endogenous A matrix (modified by import excesses and Vision 2030 goals) and a fixed A matrix (Leontief production); used for import control.
             Adapt_investment_production_scarcity =  False,       # Add reaction to production scarcity for intermediate inputs and capital (NOT labour) to modify the endogenous investment growth
             investment_scarcity_factor =            0,        # Standard value: 0.5 Sust., 0.2 V2030, False baseline. Factor for adapting investment to production scarcity, higher values lead to stronger reaction of investment to production scarcity
@@ -326,7 +326,7 @@ class ModelParameters:
             price_ceiling =                             0,
             price_smooth_factor =                       0.3,        # EMA weight on current cost share: 0.3 = 30% actual cost, 70% smoothed (normal-cost pricing, Kalecki/Lavoie)
             price_decline_limit =                       0.0,        # Steady state: no decline limit needed (prices are fixed anyway by floor/ceiling = 1/0)
-            Fix_finance_sector_price =                  True,       # Standard: True. Pin financial-sector price to 1 (prevents large drop seen in unconstrained runs). Set False to let the price float freely.
+            Fix_finance_sector_price =                  True,       # Standard: True. Pin financial-sector price to 1 (otherwise it drops strongly, see model.py). Set False to let the price float freely.
             ####################################################################################################################################################################
             # Energy sector switches and growth rates
             ####################################################################################################################################################################            
@@ -335,12 +335,12 @@ class ModelParameters:
             net_emission_reduction_green_investments_exports_transformation = False,  # Set to True to run the Net Zero 2060 pathway
             vision_2030_target_CCU_SGI_Carbon =     True,     # Toggle for the specific Vision 2030 target implementation.
             vision_2030_renewable_target =          False,      # Set to True for the Vision 2030 scenario, False for the trend scenario
-            gRE_trend_rate =                        0,          # Annual renewable growth rate for the trend scenario.
+            gRE_trend_rate =                        0,          # Not used: trend renewables grow linearly (calibration.py, re_trend_annual_addition_gj).
             energy_sector_public_share =            0.8,        # 0.8 (80% public ownership of the energy sector in KSA); set to 0.5 for a more socialized energy sector
             enable_targeted_oil_reduction =         False,      # Oil reduction according to V2030, 95% until 2030 for three sectors (industries, power plant, desalination)
             oil_reduction_target_pct =              0.95,
             oil_reduction_end_t =                   9,          # t=9 corresponds to 2030 (since t=0 is 2021)
-            enable_energy_efficiency_gains =        False,       # Set to True to activate the new logic
+            enable_energy_efficiency_gains =        False,       # Set to True to activate energy efficiency gains
             efficiency_max_reduction_pct =          0.50,       # Maximum reduction is 50%
             efficiency_top_tier_annual_gain =       0.01,       # 1% gain per year for the top-tier sectors
             efficiency_mid_tier_annual_gain =       0.005,      # 0.5% gain per year for the mid-tier sectors
@@ -367,7 +367,7 @@ class ModelParameters:
             ####################################################################################################################################################################
             Growth_rates_0_test = True,                        # Toggle to test the steady-state solution of the model without any growth rates for model consistency
             Y_GDP_Expenditure_X_harmonization = False,
-            # Note: to activate this test, all time series models must be set to False, and all endogenous mechanisms that might affect external growth rates must be disabled.
+            # to activate this test, all time series models must be set to False, and all endogenous mechanisms that might affect external growth rates must be disabled.
             ####################################################################################################################################################################
             # Water capacity constraints and desalination investment dynamics parameters
             ####################################################################################################################################################################
@@ -470,7 +470,7 @@ class ModelParameters:
             agr_price_indexing = False,
             water_supply_capacity_headroom = 0.10,   # Deliveries up to 10% above calibrated desalination/reuse capacity; beyond that, capacity investment is needed
             ####################################################################################################################################################################
-            # Not yet implemented — the following switch is defined but has no effect on model computation
+            # Not implemented: the following switch is defined but has no effect on model computation
             ####################################################################################################################################################################
             Productivity_Coefficients_X_adjustment = False,  # Adjusting productivity coefficients to output X vs. Y; not yet implemented
     )
