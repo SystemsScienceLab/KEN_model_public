@@ -70,12 +70,12 @@ def sgi_historical(t: int):
 # ---------------------------------------------------------------------------------------------------
 # Afforestation (Saudi Green Initiative): two cases, selected by p.afforestation_case
 # ---------------------------------------------------------------------------------------------------
-# A tree fixes carbon only while it transpires water. The model therefore keeps ONE water requirement
-# per tonne of CO2 for all trees, WI_SGI_BM3_PER_MT = 0.315 billion m3 per Mt CO2 (3.15 m3 per tree and
-# year at 10 kg CO2 per tree), whatever the source of the water (irrigation, rainfall, runoff or
-# groundwater). Check: mature Acacia tortilis in the Sahel transpires about 29 litres per day (about
-# 10 m3 per year) from soil water and a water table at 31 m (Do et al. 2008, Tree Physiology 28, 95-104),
-# so 3.15 m3 per year is a low water use for a tree that takes up 10 kg CO2 per year.
+# A tree fixes carbon only while it transpires water. Irrigated trees need WI_SGI_BM3_PER_MT = 0.315
+# billion m3 per Mt CO2 (3.15 m3 per tree and year at 10 kg CO2 per tree). Check: mature Acacia tortilis
+# in the Sahel transpires about 29 litres per day (about 10 m3 per year) from soil water and a water
+# table at 31 m (Do et al. 2008, Tree Physiology 28, 95-104), so 3.15 m3 per year is a low water use for
+# a tree that takes up 10 kg CO2 per year. Rain-fed native trees in the upper bound are assumed to need
+# less, SGI_NATIVE_WATER_M3_PER_TREE (below).
 #
 # 'irrigated' (lower bound; default and main run of the paper): all trees are irrigated for life with
 #   reclaimed urban wastewater that other users do not already reuse. Uptake is the policy target or
@@ -85,7 +85,8 @@ def sgi_historical(t: int):
 #   established on restored rangeland with grazing management. After establishment they live on
 #   harvested rainfall and runoff, which in practice includes the shallow groundwater that runoff
 #   recharges. Their number is limited by that water, not by planting:
-#     restored area (million ha)  x  rainfall (m3 per ha)  x  share usable by trees  /  0.315
+#     restored area (million ha)  x  rainfall (m3 per ha)  x  share usable by trees
+#     / water per mature native tree, at most SGI_NATIVE_TREES_PER_HA trees per ha
 #   This rain-fed water use is reported in v.water_use_nbs_rainfed and is NOT part of the national
 #   (blue) water balance. During establishment the seedlings are irrigated with reclaimed wastewater,
 #   which they take from the same leftover pool as the irrigated trees.
