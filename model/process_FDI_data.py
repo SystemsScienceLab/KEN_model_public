@@ -20,7 +20,6 @@ os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
 ##############################################################################
 # Process the Foreign Direct Investment (FDI) Bulletin 2023 Excel data - FDI NET INFLOW
-# Adapted from process_CSV_files.py blueprint
 # Source: input_data/FDI_foreign_direct_investment_data/Foreign-Direct-Investment-Bulletin-2023-Excel.xlsx
 # Sheet: 2-2
 ##############################################################################
@@ -203,7 +202,7 @@ print(df_gross.to_string())
 # --- Step 2: Create the FDI-to-model-sector correspondence mapping ---
 # The FDI data has 18 sectors (excluding Total), the model has 85 sectors.
 # We map each model sector to the corresponding FDI aggregate sector using the
-# NACE classification, following the same logic as in postprocessing.py (lines 281-302).
+# NACE classification, following the same logic as in postprocessing.py.
 #
 # The mapping uses investment shares (dI) within each NACE group to disaggregate
 # the aggregate FDI flows into model-sector-level flows.
@@ -298,8 +297,8 @@ model_sectors = [
 ]
 
 # Mapping from model sector index to FDI aggregate sector name
-# Based on NACE classification used in postprocessing.py (lines 281-302)
-# Note: sectors with no FDI match (Public administration=73, Desalination=84) get None
+# Based on the NACE classification used in postprocessing.py
+# Sectors with no FDI match (Public administration=73, Desalination=84) get None
 def get_fdi_sector_for_model_index(idx):
     """Map model sector index (0-based) to FDI aggregate sector name."""
     if 0 <= idx <= 2:                                                        # A

@@ -87,7 +87,7 @@ ts_remittances.index.name = 'Year'
 
 # --- Step 6: Print the extracted data ---
 print(f"\n{'='*70}")
-print(f"  Saudi Arabia — Personal Remittances Paid (1000 SAR)")
+print(f"  Saudi Arabia: Personal Remittances Paid (1000 SAR)")
 print(f"  Converted from current US$ at 1 USD = {USD_TO_SAR} SAR")
 print(f"  Source: World Development Indicators, {excel_filename}")
 print(f"{'='*70}")

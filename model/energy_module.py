@@ -68,14 +68,14 @@ def sgi_historical(t: int):
 
 
 # ---------------------------------------------------------------------------------------------------
-# Afforestation (Saudi Green Initiative): two cases, selected by p.afforestation_case (November 2026)
+# Afforestation (Saudi Green Initiative): two cases, selected by p.afforestation_case
 # ---------------------------------------------------------------------------------------------------
-# A tree fixes carbon only while it transpires water. The model therefore keeps ONE water requirement
-# per tonne of CO2 for all trees, WI_SGI_BM3_PER_MT = 0.315 billion m3 per Mt CO2 (3.15 m3 per tree and
-# year at 10 kg CO2 per tree), whatever the source of the water (irrigation, rainfall, runoff or
-# groundwater). Check: mature Acacia tortilis in the Sahel transpires about 29 litres per day (about
-# 10 m3 per year) from soil water and a water table at 31 m (Do et al. 2008, Tree Physiology 28, 95-104),
-# so 3.15 m3 per year is a low water use for a tree that takes up 10 kg CO2 per year.
+# A tree fixes carbon only while it transpires water. Irrigated trees need WI_SGI_BM3_PER_MT = 0.315
+# billion m3 per Mt CO2 (3.15 m3 per tree and year at 10 kg CO2 per tree). Check: mature Acacia tortilis
+# in the Sahel transpires about 29 litres per day (about 10 m3 per year) from soil water and a water
+# table at 31 m (Do et al. 2008, Tree Physiology 28, 95-104), so 3.15 m3 per year is a low water use for
+# a tree that takes up 10 kg CO2 per year. Rain-fed native trees in the upper bound are assumed to need
+# less, SGI_NATIVE_WATER_M3_PER_TREE (below).
 #
 # 'irrigated' (lower bound; default and main run of the paper): all trees are irrigated for life with
 #   reclaimed urban wastewater that other users do not already reuse. Uptake is the policy target or
@@ -85,7 +85,8 @@ def sgi_historical(t: int):
 #   established on restored rangeland with grazing management. After establishment they live on
 #   harvested rainfall and runoff, which in practice includes the shallow groundwater that runoff
 #   recharges. Their number is limited by that water, not by planting:
-#     restored area (million ha)  x  rainfall (m3 per ha)  x  share usable by trees  /  0.315
+#     restored area (million ha)  x  rainfall (m3 per ha)  x  share usable by trees
+#     / water per mature native tree, at most SGI_NATIVE_TREES_PER_HA trees per ha
 #   This rain-fed water use is reported in v.water_use_nbs_rainfed and is NOT part of the national
 #   (blue) water balance. During establishment the seedlings are irrigated with reclaimed wastewater,
 #   which they take from the same leftover pool as the irrigated trees.
@@ -102,22 +103,20 @@ SGI_RAINFALL_M3_PER_HA = 800.0
 # - Share of that rainfall which trees can use with water harvesting (run-on sites, wadis, small dams);
 #   the rest evaporates or runs off. 10% (range 5-20%). The most uncertain parameter.
 SGI_RAIN_SHARE_USABLE = 0.10
-# - Rain-fed native trees: 8 kg CO2 per tree and year, the lower end of the 8-12 kg band used for
+# - Rain-fed native trees: 10 kg CO2 per tree and year, the central value of the 8-12 kg band used for
 #   irrigated trees (Habib et al. 2019); 50% of the seedlings survive (irrigated field trials in central
 #   Saudi Arabia report 35-79% transplant survival depending on irrigation); seedlings receive 1 m3 of
 #   reclaimed wastewater per year for 3 years.
-SGI_NATIVE_KG_CO2_PER_TREE = 10.0   # optimistic upper bound: central value of the 8-12 kg band (was 8, the low end)
+SGI_NATIVE_KG_CO2_PER_TREE = 10.0   # optimistic upper bound: central value of the 8-12 kg band
 SGI_NATIVE_SURVIVAL = 0.5
 SGI_ESTABLISH_M3_PER_TREE_YEAR = 1.0
 SGI_ESTABLISH_YEARS = 3
 SGI_MATURITY_YEARS = 5      # a tree reaches full uptake in its fifth year (20% per year)
 # - Water a mature rain-fed native tree needs to survive after establishment (m3 per tree and year of
-#   rainfall, runoff and soil water; November 2026, Michael's decision to move the upper bound towards
-#   the earlier SGI logic of Ansir, in which established native trees needed no water at all).
-#   1.0 m3 is a third of the 3.15 m3 of an irrigated tree (WI_SGI_BM3_PER_MT at 10 kg CO2 per tree).
-#   Drought-adapted Acacia and Ziziphus survive dry years with low transpiration. Assumption, range 0.5
-#   (close to the earlier logic) to 3.15 (same water need as irrigated trees).
-SGI_NATIVE_WATER_M3_PER_TREE = 0.6    # optimistic upper bound, close to the earlier logic (Ansir: 0); a fifth of an irrigated tree
+#   rainfall, runoff and soil water). 0.6 m3 is about a fifth of the 3.15 m3 of an irrigated tree
+#   (WI_SGI_BM3_PER_MT at 10 kg CO2 per tree). Drought-adapted Acacia and Ziziphus survive dry years
+#   with low transpiration. Assumption, range 0.5 to 3.15 (same water need as irrigated trees).
+SGI_NATIVE_WATER_M3_PER_TREE = 0.6    # optimistic upper bound, about a fifth of an irrigated tree
 # - Maximum density of native trees on restored rangeland (trees per ha). Open acacia woodland in the
 #   Arabian Peninsula has tens to a few hundred trees per ha. Assumption, range 100-200.
 SGI_NATIVE_TREES_PER_HA = 150.0
@@ -235,7 +234,7 @@ def trees_planted_accounting(v: ModelVariables, t: int):
 
 
 def hydrogen_cap_gj(p: ModelParameters, t: int) -> float:
-    """Upper limit of total clean hydrogen production in year t (GJ H2), November 2026.
+    """Upper limit of total clean hydrogen production in year t (GJ H2).
     National ambition: about 2.9 Mt H2 by 2030 and 4 Mt by 2035, exports included (CSIS, MEED). From
     2035 the cap moves linearly to p.hydrogen_cap_2060_mt (4.0 = national target held, Vision 2030;
     7.0 in the Transformation scenario, which assumes the strategy keeps expanding after 2035)."""
@@ -267,12 +266,12 @@ def tier_overlaps(tiers, share: float):
 
 
 def process_emissions_and_abatement(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrated, t: int, x_real_):
-    """Process and other non-combustion emissions by sector in year t (MtCO2e), November 2026.
+    """Process and other non-combustion emissions by sector in year t (MtCO2e).
 
     emissions = 2021 value x driver index x (1 - abatement share). Driver: real sector output, or the
     population index for waste and wastewater (calibration.py section 5.5b (f)); with
-    p.process_emissions_frozen_technology all items follow real output and nothing is abated (the
-    result of the first November version). Abatement in hydrogen-based tiers needs clean hydrogen. It is
+    p.process_emissions_frozen_technology all items follow real output and nothing is abated
+    (frozen technology). Abatement in hydrogen-based tiers needs clean hydrogen. It is
     limited by the process electrolyser capacity built in energy_investment_module (one year of lead
     time) and by the national hydrogen cap; the unconstrained need is stored in
     v.hydrogen_process_demand, the hydrogen used in v.hydrogen_process_use (GJ H2)."""
@@ -372,14 +371,13 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
     
     # Energy demand follows REAL gross output (2021 prices), not nominal output X: the intensities are
     # GJ per unit of 2021 output, so nominal output would let energy use grow with the price level
-    # (about 0.4% per year, 15% by 2060). Correction of November 2026; see utils.real_output_2021_prices.
+    # (about 0.4% per year, 15% by 2060). See utils.real_output_2021_prices.
     x_real_ = real_output_2021_prices(v, t)
 
     # The electricity intensities carry one common scaling factor for all sectors and all scenarios
     # (ParametersCalibrated.ELECTRICITY_SCALING_FACTOR, calibration.py section 5.5b), fitted on the
-    # Baseline so that sectoral electricity demand equals observed generation in 2025. Before November
-    # 2026 the factor was recomputed inside each run in 2025, which gave every scenario its own
-    # electricity intensities (1.48 Baseline, 1.38 Vision 2030, 1.42 Transformation).
+    # Baseline so that sectoral electricity demand equals observed generation in 2025. All scenarios
+    # therefore use the same electricity intensities.
     v.gas_use_[t] = x_real_ * pc.gas_intensities_ * (1.0 - v.energy_reduction_factor_[t])
     v.electricity_use_[t] = x_real_ * pc.electricity_intensities_ * (1.0 - v.energy_reduction_factor_[t])
     v.oil_use_[t] = x_real_ * pc.oil_intensities_ * (1.0 - v.energy_reduction_factor_[t])
@@ -413,7 +411,7 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
                 oil_to_reduce_gj = v.oil_use_final_[t][target_indices_non_elec] * current_reduction_pct
                 v.oil_use_final_[t][target_indices_non_elec] -= oil_to_reduce_gj
                 v.gas_use_final_[t][target_indices_non_elec] += oil_to_reduce_gj
-                v.liquid_displaced_oil_gj[t] = np.sum(oil_to_reduce_gj)   # diagnostic (November 2026)
+                v.liquid_displaced_oil_gj[t] = np.sum(oil_to_reduce_gj)   # reported for analysis
     
     v.gas_use_total[t] = np.sum(v.gas_use_final_[t])
     v.oil_use_total[t] = np.sum(v.oil_use_final_[t])
@@ -462,9 +460,9 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
                         actual_sub = np.minimum(v.gas_use_final_[t][i], h2_sub)
                         v.gas_use_final_[t][i] -= actual_sub
 
-    # --- Process emissions, their abatement and process hydrogen (November 2026) ---
+    # Process emissions, their abatement and process hydrogen
     # Computed here, before the electricity mix, because the hydrogen for process abatement uses
-    # renewable electricity. That electricity was added to the renewable build-out in
+    # renewable electricity. That electricity is part of the renewable build-out in
     # energy_investment_module (dedicated capacity, as for industrial electrification), so it does not
     # reduce the renewable supply of the grid. Process hydrogen is not exported and does not replace
     # fuel; it is added to hydrogen production only for the water and electricity accounts.
@@ -478,7 +476,7 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
     # --- ELECTRIFICATION STRATEGY (Oil/Gas -> Electricity) ---
     # ======================================================================
     # Electricity that replaces the shifted oil and gas (GJ, by sector). Kept apart from the other
-    # sectoral demand, so that the demand cap of section 3 does not cut it (November 2026).
+    # sectoral demand, so that the demand cap of section 3 does not cut it.
     if not hasattr(v, '_elec_shift_gj'):
         v._elec_shift_gj = np.zeros(len(v.electricity_use_total))
     elec_shift_vec = np.zeros(len(v.electricity_use_[t]))
@@ -507,7 +505,6 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
             # C. Add to Electricity Demand
             # 1 GJ of fossil fuel is replaced by 1/COP GJ of electricity, with the same COP as the
             # renewable investment (energy_investment_module.py, section 1) and the SI (COP 2.5).
-            # Until November 2026 the shift was 1:1 here, and the demand cap of section 3 then cut it.
             cop = getattr(p, 'electrification_cop', 2.5)
             total_shifted_energy = oil_to_shift + gas_to_shift
             elec_shift_vec[target_indices] = total_shifted_energy / cop
@@ -516,7 +513,7 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
             # D. Update Totals (so Generation Mix sees new demand)
             v.gas_use_total[t] = np.sum(v.gas_use_final_[t])
             v.oil_use_total[t] = np.sum(v.oil_use_final_[t])
-            # Note: v.electricity_use_total will be calculated in the next section based on v.electricity_use_
+            # v.electricity_use_total will be calculated in the next section based on v.electricity_use_
     if t <= 1: 
         v.oil_use_final_[t][elec_idx] = pc.hist_elec_oil_gj[t-1]
         v.gas_use_final_[t][elec_idx] = pc.hist_elec_gas_gj[t-1]
@@ -542,7 +539,7 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
         nexus_feedback = getattr(p, 'nexus_water_electricity_feedback', False)
         nexus_water_load = v.electricity_nexus_water_total[t-1] if nexus_feedback else 0.0
         # The trend cap applies to demand without the electrified load; the electrified load (above) is
-        # added on top, so it neither gets cut nor crowds out the other sectors (November 2026).
+        # added on top, so it neither gets cut nor crowds out the other sectors.
         v._elec_shift_gj[t] = np.sum(elec_shift_vec)
         sectoral_base = (v.electricity_use_total[t-1] - v._elec_shift_gj[t-1]
                          - (v.electricity_nexus_water_total[t-2] if nexus_feedback and t > 2 else 0.0))
@@ -608,7 +605,7 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
             new_oil_share = pc.hist_power_oil_share_ff[t-1]
             new_gas_share = pc.hist_power_gas_share_ff[t-1]
         else:
-            # Diagnostic (November 2026): electricity generated from gas instead of oil because of the
+            # Reported for analysis: electricity generated from gas instead of oil because of the
             # liquid displacement, against the 2023 oil share of fossil generation
             v.liquid_displaced_power_elec_gj[t] = ff_gap_needed * max(0.0, base_oil_share - new_oil_share)
         v.oil_use_final_[t][elec_idx] = ff_gap_needed * new_oil_share
@@ -696,10 +693,10 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
     v.gas_use_total[t] = np.sum(v.gas_use_final_[t])
     v.oil_use_total[t] = np.sum(v.oil_use_final_[t])
 
-    # Final energy demand (added November 2026): oil and gas used outside the power sector, electricity,
+    # Final energy demand: oil and gas used outside the power sector, electricity,
     # and renewable energy used directly in place of oil and gas (section 4). v.total_energy_demand
     # above also contains the power sector's fossil generation, which is already part of electricity,
-    # so it counts that electricity twice; it is kept for comparison with earlier results.
+    # so it counts that electricity twice. It is kept as a reference total.
     non_power_ = np.ones(len(v.oil_use_final_[t]), dtype=bool)
     non_power_[elec_idx] = False
     re_direct_gj = oil_substituted + gas_substituted
@@ -718,10 +715,10 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
     elec_sector_oil_emissions = v.oil_use_final_[t][elec_idx] * pc.oil_emission_factor
     total_elec_sector_emissions = elec_sector_gas_emissions + elec_sector_oil_emissions
     
-    # Updated denominator: Total generation includes (Oil + Gas + RE consumed by elec)
-    # Note: re_consumed_by_elec depends on re_gen_net, calculated above
-    # The power sector's oil and gas are now fuel input (section 4b), so use the electricity
-    # generated from them here.
+    # Denominator: total generation (oil + gas + RE consumed by the electricity sector)
+    # re_consumed_by_elec depends on re_gen_net, calculated above
+    # The power sector's oil and gas are fuel input (section 4b), so the electricity
+    # generated from them is used here.
     total_elec_gen_gj = (elec_from_gas_gj + elec_from_oil_gj + re_consumed_by_elec)
     dynamic_elec_emission_factor = total_elec_sector_emissions / total_elec_gen_gj if total_elec_gen_gj > 0 else 0
     v.electricity_emissions_[t] = v.electricity_use_[t] * dynamic_elec_emission_factor
@@ -948,15 +945,13 @@ def energy_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrate
         # Total added electricity demand to support the green transition's water needs
         total_nexus_electricity_added_gj = energy_for_nexus_desal_gj + energy_for_nexus_gw_gj + energy_for_nexus_wwater_gj
         
-        # Track this specific Nexus electricity demand (useful for plotting later)
+        # Track this specific Nexus electricity demand
         if hasattr(v, 'electricity_nexus_water_total'):
             v.electricity_nexus_water_total[t] = total_nexus_electricity_added_gj
             
         # 3. Close the loop (optional, p.nexus_water_electricity_feedback): this load enters national
         # electricity generation, and with it fuel use and emissions, in the next period (section 3)
-            
-        # Optional: if a specific water sector index is available in the 40-sector array,
-        # the demand can be added directly to that sector so the economy pays for it.
+
     return v.I_[t],v.I_demand_[t],v.gas_use_[t],v.oil_use_final_[t],v.gas_use_final_[t], v.electricity_use_[t], v.oil_use_[t], v.energy_reduction_factor_[t],\
             v.gas_use_total[t],v.oil_use_total[t],v.electricity_use_total[t], v.renewable_energy_generation[t],\
             v.I_efficiency_[t],v.I_netzero_nature_[t],v.emissions_net_total[t],v.emissions_gross_total[t],v.I_carbon_credit_revenue_[t],\

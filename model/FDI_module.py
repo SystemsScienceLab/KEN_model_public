@@ -29,7 +29,7 @@ FDI growth modes (controlled by p.FDI_follow_domestic_growth):
      FDI_target > 0.  A per-sector cap (FDI_MAX_SECTORAL_SHARE, default 50%)
      prevents any single sector from being overly FDI-dependent.
 
-  2. FDI_follow_domestic_growth = False (legacy mode):
+  2. FDI_follow_domestic_growth = False:
      FDI grows from its 2021 base-year value at the fixed annual rate
      calibrated from FDI_target.  Growth is applied for the duration of
      vision_2030_timing, after which FDI stays constant.
@@ -61,10 +61,10 @@ def fdi_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrated, 
 
     Parameters
     ----------
-    v : ModelVariables    — model state arrays (modified in-place)
-    p : ModelParameters   — scenario parameters (enable_FDI, FDI_target, etc.)
-    pc : ParametersCalibrated — calibrated parameters (FDI base year, growth rates)
-    t : int               — current time step (1-indexed, t=1 is 2021)
+    v : ModelVariables    model state arrays (modified in-place)
+    p : ModelParameters   scenario parameters (enable_FDI, FDI_target, etc.)
+    pc : ParametersCalibrated  calibrated parameters (FDI base year, growth rates)
+    t : int               current time step (1-indexed, t=1 is 2021)
     """
 
     if not p.enable_FDI:
@@ -72,12 +72,10 @@ def fdi_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrated, 
         v.I_domestic_[t] = v.I_[t].copy()
         return
 
-    # ─────────────────────────────────────────────────────────────────────────
     # 1. Determine FDI flows by sector
-    # ─────────────────────────────────────────────────────────────────────────
     # Two growth modes, controlled by p.FDI_follow_domestic_growth:
     #
-    # Mode A (FDI_follow_domestic_growth = True):
+    # FDI_follow_domestic_growth = True:
     #   FDI tracks the actual realized *sectoral* investment growth rate,
     #   gI_realized_[s] = I_[t,s] / I_[t-1,s] - 1, so that each sector's
     #   FDI grows in line with that sector's investment dynamics.  The
@@ -86,7 +84,7 @@ def fdi_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrated, 
     #   Per-sector cap: FDI cannot exceed FDI_MAX_SECTORAL_SHARE of I_[t,s].
     #   Aggregate cap: total FDI cannot exceed 95% of I_total[t].
     #
-    # Mode B (FDI_follow_domestic_growth = False — legacy):
+    # FDI_follow_domestic_growth = False:
     #   FDI grows from its base-year value at the fixed FDI_target annual rate.
     #   After vision_2030_timing, FDI stays constant at the level reached.
     #   Distributed proportionally to positive sectoral I_[t].
@@ -101,7 +99,7 @@ def fdi_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrated, 
         fdi_target_factor = 1.0
 
     if p.FDI_follow_domestic_growth:
-        # ── Mode A: sectoral realized I_ growth + FDI target premium ──
+        # Sectoral realized I_ growth + FDI target premium
         if t == 1:
             # First period: distribute base-year aggregate to sectors
             fdi_net_aggregate = pc.FDI_base_year_net_total
@@ -119,17 +117,17 @@ def fdi_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrated, 
             # Floor: no negative FDI
             v.FDI_net_flow_[t] = np.maximum(v.FDI_net_flow_[t], 0.0)
 
-        # Per-sector cap: FDI ≤ FDI_MAX_SECTORAL_SHARE × positive I_[t,s]
+        # Per-sector cap: FDI <= FDI_MAX_SECTORAL_SHARE * positive I_[t,s]
         max_fdi_per_sector = FDI_MAX_SECTORAL_SHARE * np.maximum(v.I_[t], 0.0)
         v.FDI_net_flow_[t] = np.minimum(v.FDI_net_flow_[t], max_fdi_per_sector)
 
-        # Aggregate cap: total FDI ≤ 95% of I_total
+        # Aggregate cap: total FDI <= 95% of I_total
         fdi_total = np.sum(v.FDI_net_flow_[t])
         if v.I_total[t] > 0 and fdi_total > v.I_total[t] * 0.95:
             v.FDI_net_flow_[t] *= (v.I_total[t] * 0.95 / fdi_total)
 
     else:
-        # ── Mode B: fixed-rate growth from base year (legacy) ──
+        # Fixed-rate growth from base year
         if t <= p.vision_2030_timing:
             fdi_net_aggregate = pc.FDI_base_year_net_total * (1 + pc.FDI_yearly_target_growth_rate) ** (t - 1)
         else:
@@ -147,14 +145,10 @@ def fdi_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrated, 
         else:
             v.FDI_net_flow_[t] = np.zeros(pc.S)
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # 3. Decompose investment: domestic = total - FDI
-    # ─────────────────────────────────────────────────────────────────────────
+    # 2. Decompose investment: domestic = total - FDI
     v.I_domestic_[t] = v.I_[t] - v.FDI_net_flow_[t]
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # 4. Gross FDI flows (scale proportionally from base-year gross/net ratio)
-    # ─────────────────────────────────────────────────────────────────────────
+    # 3. Gross FDI flows (scale proportionally from base-year gross/net ratio)
     # Gross FDI = Net FDI * (base_year_gross / base_year_net) for each sector
     # Use absolute values to handle sign issues; if no base-year net, use net = gross
     fdi_net_base_total = np.abs(pc.FDI_base_year_net_total)
@@ -166,20 +160,16 @@ def fdi_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrated, 
 
     v.FDI_gross_flow_[t] = np.abs(v.FDI_net_flow_[t]) * gross_to_net_ratio
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # 5. FDI stock accumulation: Stock(t) = Stock(t-1) + Gross_inflow(t)
-    # ─────────────────────────────────────────────────────────────────────────
+    # 4. FDI stock accumulation: Stock(t) = Stock(t-1) + Gross_inflow(t)
     if t == 1:
         # Initialize stock from calibrated base-year values
         v.FDI_stock_[t] = pc.FDI_base_year_stock_ + v.FDI_gross_flow_[t]
     else:
         v.FDI_stock_[t] = v.FDI_stock_[t - 1] + v.FDI_gross_flow_[t]
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # 5b. Net FDI stock accumulation: NetStock(t) = NetStock(t-1) + max(net_flow, 0)
-    # Tracks only net inflows — avoids gross/net ratio amplification.
+    # 4b. Net FDI stock accumulation: NetStock(t) = NetStock(t-1) + max(net_flow, 0)
+    # Tracks only net inflows, so the gross/net ratio does not amplify it.
     # Used in model.py for FDI income repatriation calculations.
-    # ─────────────────────────────────────────────────────────────────────────
     if t == 1:
         # Initialize net stock: base-year net aggregate distributed by investment shares
         fdi_net_base = pc.FDI_base_year_net_total
@@ -190,9 +180,7 @@ def fdi_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrated, 
     else:
         v.FDI_net_stock_[t] = v.FDI_net_stock_[t - 1] + np.maximum(v.FDI_net_flow_[t], 0.0)
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # 6. Aggregate (macro) FDI variables
-    # ─────────────────────────────────────────────────────────────────────────
+    # 5. Aggregate (macro) FDI variables
     v.FDI_net_total[t] = np.sum(v.FDI_net_flow_[t])
     v.FDI_gross_total[t] = np.sum(v.FDI_gross_flow_[t])
     v.FDI_stock_total[t] = np.sum(v.FDI_stock_[t])

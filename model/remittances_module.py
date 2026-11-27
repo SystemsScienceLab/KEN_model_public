@@ -24,8 +24,7 @@ Growth modes (controlled by p.remittances_follow_wage_growth):
      Remittances grow with the nominal wage bill growth rate:
        gW_nominal = W[t] / W[t-1] - 1
      This captures real GDP growth, inflation, and employment dynamics.
-     Economically sound: remittances sent by foreign workers scale with
-     their compensation.  An additional manual adjustment parameter
+     Remittances sent by foreign workers scale with their compensation.  An additional manual adjustment parameter
      p.remittances_growth_adjustment is layered on top.
 
   2. remittances_follow_wage_growth = False (exogenous trend):
@@ -47,14 +46,14 @@ def remittances_module(v: ModelVariables, p: ModelParameters, pc: ParametersCali
     Compute remittances for time step t.
 
     Must be called AFTER wages W[t] are computed (section 3.3 of model.py),
-    so that wage-bill growth is available for Mode A.
+    so that wage-bill growth is available when remittances_follow_wage_growth is True.
 
     Parameters
     ----------
-    v : ModelVariables    — model state arrays (modified in-place)
-    p : ModelParameters   — scenario parameters (enable_remittances, etc.)
-    pc : ParametersCalibrated — calibrated parameters (remittances_base_year, gRemittances_avg)
-    t : int               — current time step (1-indexed, t=1 is 2021)
+    v : ModelVariables    model state arrays (modified in-place)
+    p : ModelParameters   scenario parameters (enable_remittances, etc.)
+    pc : ParametersCalibrated  calibrated parameters (remittances_base_year, gRemittances_avg)
+    t : int               current time step (1-indexed, t=1 is 2021)
     """
 
     if not p.enable_remittances:
@@ -67,11 +66,9 @@ def remittances_module(v: ModelVariables, p: ModelParameters, pc: ParametersCali
         v.remittances_growth[t] = 0.0
         return
 
-    # ─────────────────────────────────────────────────────────────────────
     # Determine remittances growth rate
-    # ─────────────────────────────────────────────────────────────────────
     if p.remittances_follow_wage_growth:
-        # Mode A: grow with nominal wage bill
+        # Grow with nominal wage bill
         # W[t] is already computed in section 3.3 of model.py
         if v.W[t - 1] > 0:
             gW_nominal = v.W[t] / v.W[t - 1] - 1.0
@@ -79,12 +76,12 @@ def remittances_module(v: ModelVariables, p: ModelParameters, pc: ParametersCali
             gW_nominal = 0.0
         g_remit = np.maximum(gW_nominal + p.remittances_growth_adjustment,0.0)  # Ensure remittances growth is not negative
     else:
-        # Mode B: exogenous trend from calibrated average growth rate
+        # Exogenous trend from calibrated average growth rate
         g_remit = np.maximum(pc.gRemittances_avg + p.remittances_growth_adjustment,0.0)  # Ensure remittances growth is not negative
 
-    # Saudization policy: rising domestic labour share → fewer foreign workers → smaller
+    # Saudization policy: a rising domestic labour share means fewer foreign workers, so a smaller
     # fraction of the wage bill is remitted abroad each year.
-    # Compound formula: (1+g_eff) = (1+g_raw) × (1 − saud_rate)
+    # Compound formula: (1+g_eff) = (1+g_raw) * (1 - saud_rate)
     saud_rate = getattr(p, 'remittances_saudization_rate', 0.0)
     if saud_rate > 0.0:
         g_remit = (1.0 + g_remit) * (1.0 - saud_rate) - 1.0

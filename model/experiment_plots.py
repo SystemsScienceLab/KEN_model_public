@@ -1,4 +1,4 @@
-﻿# =============================================================================
+# =============================================================================
 # Lead model conceptualization and development (theory, methodology, and
 # implementation), software architecture & model coding (all components),
 # data acquisition & processing, team supervision: Michael Miess
@@ -22,16 +22,16 @@ plt.rc('xtick', labelsize=16)
 plt.rc('ytick', labelsize=16)
 plt.rc('legend', fontsize=16)
 
-# Mapping from internal scenario key   human-readable legend label.
+# Mapping from internal scenario key to human-readable legend label.
 # Only scenarios that need a different display name require an entry.
 SCENARIO_LABELS = {
     "Transformation": "Transformation",
 }
 
 
- # 
+# =============================================================================
 # PRIVATE HELPERS - overlap resolution & GDP-share endpoint annotations
- # 
+# =============================================================================
 
 def _truncate_reports(reports, last_year=2060):
     """Cut all run reports to 2021..last_year (model period t = year - 2020), so that the
@@ -139,9 +139,9 @@ def _add_endpoint_annotations(ax, start_annots, end_annots, years_ref, caption_t
                         transform=ax.transAxes, fontsize=14, color='black',
                         style='italic', va='bottom', ha='left')
 
- # 
+# =============================================================================
 # PRIVATE HELPER - panel drawing
- # 
+# =============================================================================
 
 def _plot_panel(ax, reports, variables, title, scenario_colors, ylabel="Trillion SAR", zero_line=False, legend_fontsize=16, gdp_share=False, show_legend=True, legend_loc='best', caption_text='% of GDP Y (Tn SAR for 2021 and 2060)', caption_loc='bottom_left', start_filter_scenario=None, start_ratio_overrides=None, start_x_offset=1.5):
     """
@@ -304,8 +304,7 @@ def _plot_panel_raw(ax, reports, col, title, ylabel, scenario_colors,
 
 def plot_macro_comparison(reports):
     """
-    Six-panel scenario comparison inspired by the 'Multiple Plots for comparison'
-    block in postprocessing.py (lines 101-149).
+    Six-panel scenario comparison of key macroeconomic variables.
 
     Each panel shows 1-2 key variables; colour = scenario, line-style = variable.
     Solid line = first variable listed, dashed = second variable.
@@ -386,16 +385,14 @@ def plot_macro_comparison(reports):
     plt.show()
 
 
- #
+# =============================================================================
 # GDP EXPENDITURE IDENTITY DECOMPOSITION  (standalone, one panel per scenario)
- #
+# =============================================================================
 
 # Component colours. These are keyed by GDP COMPONENT, not by scenario, so the
-# module-level scenario_colors cannot be reused here. Validated as an adjacent-pair
-# categorical set on a white surface: worst CVD dE 9.1 (>=8 target), worst
-# normal-vision dE 19.6 (>=15 floor). Three of the five sit below 3:1 contrast on
-# white, so the direct share labels drawn inside each band are mandatory, not
-# decorative - identity must never rest on colour alone.
+# module-level scenario_colors cannot be reused here. The colours remain distinguishable
+# with colour vision deficiency. Three of the five have low contrast on white, so the
+# share labels are also drawn inside each band.
 GDP_COMPONENT_COLORS = {
     'Y_C':  '#2a78d6',   # blue
     'Y_G':  '#eb6834',   # orange
@@ -417,14 +414,14 @@ def plot_gdp_identity_decomposition(reports, min_label_share=4.0):
     """
     Show that the GDP expenditure components add up EXACTLY to total GDP.
 
-    One panel per scenario, stacked VERTICALLY so each verification is large and legible.
+    One panel per scenario, stacked vertically (one full-width row per scenario).
     Everything is expressed as a share of nominal GDP, so the positive components stack to
     (100 + import share) % and imports are drawn as a deduction below zero:
     stack top - import depth = 100% = GDP.
 
     Series are taken from the dedicated identity columns Y_C, Y_G, Y_I, Y_EX, Y_IM
     (model_classes.ModelVariables, written in model.py section 12). Those are exact by
-    construction. Do NOT rebuild this from the general macro columns: 'Gov_exp' is a
+    construction. The general macro column 'Gov_exp' is not used: it is a
     FISCAL total that also carries subsidies, public investment GI (already inside
     investment), bond interest and repayments, and would overstate G by 9-12 pp of GDP.
 
@@ -451,7 +448,7 @@ def plot_gdp_identity_decomposition(reports, min_label_share=4.0):
              for s in all_shares.values() if all(v is not None for v in s.values())]
     _ylim = ((min(_bots) * 1.18, max(_tops) * 1.06) if _tops and _bots else None)
 
-    # Vertically stacked: one full-width row per scenario, so each verification is large.
+    # Vertically stacked: one full-width row per scenario.
     # The suptitle / legend / caption bands are reserved in INCHES and converted to figure
     # fractions, because the figure height grows with the number of scenarios and fixed
     # fractional offsets would drift as panels are added.
@@ -486,14 +483,13 @@ def plot_gdp_identity_decomposition(reports, min_label_share=4.0):
                         color=GDP_COMPONENT_COLORS['Y_IM'], label='Imports IM (deduction)',
                         edgecolor='white', linewidth=2.0)
 
-        # --- the identity itself: computed sum, which must lie ON the 100% line ---
+        # --- the identity: computed sum, which lies on the 100% line ---
         computed = (shares['Y_C'] + shares['Y_G'] + shares['Y_I']
                     + shares['Y_EX'] - shares['Y_IM'])
-        # The computed sum is drawn in the surface colour ON TOP of the solid GDP line, so
-        # the GDP line reads as dashed exactly where the two coincide - and separates
-        # visibly if the identity ever breaks again. It carries no legend entry of its own:
-        # a white line is invisible against the legend surface, so the GDP line's label
-        # explains the dashes instead.
+        # The computed sum is drawn in white on top of the solid GDP line, so the GDP line
+        # appears dashed where the two coincide, and the two lines separate if the identity
+        # does not hold. The white line has no legend entry of its own (it would be invisible
+        # in the legend), the label of the GDP line explains the dashes.
         ax.axhline(100, color='#0b0b0b', linewidth=3.0, zorder=6,
                    label='GDP Y = 100%  (dashes = computed C + G + I + EX - IM)')
         ax.plot(years, computed, color='#fcfcfb', linewidth=1.4, linestyle=(0, (4, 3)),
@@ -502,7 +498,7 @@ def plot_gdp_identity_decomposition(reports, min_label_share=4.0):
         resid_pct = float(np.max(np.abs(computed - 100.0)))
         worst_resid_pct = max(worst_resid_pct, resid_pct)
 
-        # --- direct labels: mandatory relief for the sub-3:1 component colours ---
+        # --- share labels inside the bands ---
         for col, _ in GDP_COMPONENT_LABELS:
             base = np.zeros(len(years))
             for c2, _ in GDP_COMPONENT_LABELS:
@@ -542,8 +538,7 @@ def plot_gdp_identity_decomposition(reports, min_label_share=4.0):
                 fontsize=16, fontweight='bold', va='top')
 
     # One figure-level legend below the panels: inside an axes it would cover the 2021
-    # share labels, which are the mandatory relief for the low-contrast component colours.
-    # ncol=3 rather than one row: the figure is now narrow, and the GDP-line label is long.
+    # share labels. ncol=3, because the figure is narrow and the GDP-line label is long.
     _handles, _labels = axs[0].get_legend_handles_labels()
     fig.legend(_handles, _labels, loc='lower center', ncol=3,
                bbox_to_anchor=(0.5, 0.80 / _fig_h), fontsize=14, frameon=False)
@@ -559,8 +554,8 @@ def plot_gdp_identity_decomposition(reports, min_label_share=4.0):
              "Gov_exp, which also contains subsidies, public investment GI, and debt service.",
              fontsize=12, ha='left', va='bottom', color='#52514e')
 
-    # The numeric counterpart to the dashed overlay: reported to the console rather than on
-    # the figure, so the panel caption stays clean. Should be ~1e-14 pp (machine precision).
+    # Maximum deviation of the identity, printed to the console (machine precision if the
+    # identity holds).
     print(f"GDP identity verification: worst deviation of (C + G + I + EX - IM) from GDP "
           f"across all scenarios and years = {worst_resid_pct:.2e} pp of GDP")
 
@@ -568,18 +563,13 @@ def plot_gdp_identity_decomposition(reports, min_label_share=4.0):
     plt.show()
 
 
- #
+# =============================================================================
 # BALANCE OF PAYMENTS SCENARIO COMPARISON  (4-panel, 2 x 2)
- #
-
- # 
-# BALANCE OF PAYMENTS SCENARIO COMPARISON  (4-panel, 2 x 2)
- # 
+# =============================================================================
 
 def plot_bop_comparison(reports):
     """
-    Four-panel scenario comparison for the Balance of Payments,
-    simplified from postprocessing.py (lines 162-193) for readability.
+    Four-panel scenario comparison for the Balance of Payments.
 
     Shows the most informative BoP aggregates; drops derived/redundant series
     (secondary_income_balance, primary_income_balance, Gov_ext_assets_income,
@@ -793,8 +783,8 @@ def plot_bop_comparison(reports):
             if not all(c in macro.columns for c in need):
                 continue
             # Non-trade CA flows = primary income balance + secondary income balance
-            # = (GEA_income  FDI profit repat.  bond ext. int.) + (remittances)
-            # Computed cleanly as CA  trade_balance (avoids mixing in FA items)
+            # = (GEA_income - FDI profit repat. - bond ext. int.) + (-remittances)
+            # Computed as CA - trade_balance (avoids mixing in FA items)
             non_trade_ca = (macro['current_account'].values - macro['trade_balance'].values) / 1_000_000_000
             data.append(non_trade_ca)
         if not data:
@@ -827,9 +817,9 @@ def plot_bop_comparison(reports):
     plt.show()
 
 
- # 
-# ORIGINAL SINGLE-VARIABLE EXPERIMENT PLOT
- # 
+# =============================================================================
+# SINGLE-VARIABLE EXPERIMENT PLOT
+# =============================================================================
 
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -998,9 +988,9 @@ def plot_experiment_variable(reports, variable_name, variable_label=None, unit="
     if is_standalone:
         plt.tight_layout()
         plt.show()
- # 
-# FINANCIAL & PHYSICAL STOCKS SCENARIO COMPARISON  (3 x 2)
- # 
+# =============================================================================
+# FINANCIAL & PHYSICAL STOCKS SCENARIO COMPARISON  (2 x 2)
+# =============================================================================
 
 def plot_stocks_comparison(reports):
     """
@@ -1161,7 +1151,7 @@ def plot_stocks_comparison(reports):
         ('Bond_domestic',  'Dom. Bonds (liability)',             '-.',  -1.0),
         ('Bond_external',  'Ext. Bonds (liability)',             ':',   -1.0),
     ]
-    # Narrower figure: no outside-legend space needed; legend moves inside.
+    # Legend inside the axes, so no space is needed for an outside legend.
     fig_gov, ax_gov = plt.subplots(figsize=(12, 8))
     sns.set_style("whitegrid")
     _gov_years_ref = None
@@ -1225,22 +1215,18 @@ def plot_stocks_comparison(reports):
     plt.show()
 
 
- # 
+# =============================================================================
 # TOP SECTORS BY GDP Y - SCENARIO COMPARISON
- # 
-
- # 
-# TOP SECTORS BY GDP Y - SCENARIO COMPARISON
- # 
+# =============================================================================
 
 def plot_sectoral_gdp_comparison(reports):
     """
     Show exactly 12 sectors in a 4x3 grid:
     - 6 fixed key sectors (petroleum, machinery, construction, real estate,
       public administration, education)
-    - 3 extra sectors from Transformation (largest Y at finalal period)
+    - 3 extra sectors from Transformation (largest Y at final period)
     - 3 extra sectors from Transformation selected by a rank-sum of relative
-      growth (Y_end/Y_start) and absolute growth (Y_end  Y_start), i.e. the
+      growth (Y_end/Y_start) and absolute growth (Y_end - Y_start), i.e. the
       sectors that grew the fastest AND reached meaningful GDP size - the type
       of structural transformation driven by Vision 2030 / industrial policy
       (e.g. ICT, professional services, tourism-related).
@@ -1289,7 +1275,7 @@ def plot_sectoral_gdp_comparison(reports):
     # 3. Get Transformation scenario data for extra-sector selection 
     sus_key = next((k for k in reports if 'transformation' in k.lower()), None)
 
-    # 3a. 3 extra sectors by largest Y at final period (existing logic) 
+    # 3a. 3 extra sectors by largest Y at final period
     extra_by_size = []
     if sus_key and reports[sus_key]:
         rr0 = reports[sus_key][0]
@@ -1421,7 +1407,7 @@ def plot_sectoral_gdp_comparison(reports):
                 Y_df = rr["results_sectoral"]["Y"]
                 if sector_idx not in Y_df.columns:
                     continue
-                vals = Y_df[sector_idx].values / 1_000_000_000  # Thousand   Trillion SAR
+                vals = Y_df[sector_idx].values / 1_000_000_000  # Thousand SAR to Trillion SAR
                 data.append(vals)
                 if years is None:
                     years = list(range(2021, 2021 + len(vals)))
@@ -1553,9 +1539,9 @@ def plot_sectoral_gdp_comparison(reports):
 
     plt.tight_layout()
     plt.show()
- # 
+# =============================================================================
 # INFLATION & PRICE LEVEL SCENARIO COMPARISON  (2 x 2)
- # 
+# =============================================================================
 
 def plot_inflation_comparison(reports):
     """
@@ -1632,9 +1618,9 @@ def plot_inflation_comparison(reports):
     plt.show()
 
 
- # 
+# =============================================================================
 # MOST DYNAMIC SECTORS - SECTORAL PRICE DEVELOPMENTS  (3 x 3)
- # 
+# =============================================================================
 
 def plot_sectoral_prices_comparison(reports, n_sectors=9):
     """
@@ -1642,7 +1628,7 @@ def plot_sectoral_prices_comparison(reports, n_sectors=9):
     n_sectors most price-dynamic sectors.
 
     Dynamism is measured as the mean absolute change from the base year to the
-    final period  (|p_final  p_initial|), averaged over all scenarios and runs.
+    final period (|p_final - p_initial|), averaged over all scenarios and runs.
     This identifies sectors whose prices deviate most from baseline regardless
     of direction (rapid appreciation OR deflation both count as dynamic).
 
@@ -1684,7 +1670,7 @@ def plot_sectoral_prices_comparison(reports, n_sectors=9):
         print("plot_sectoral_prices_comparison: no sectoral price data ('p') found.")
         return
 
-    # 3. Rank sectors by mean absolute price change (base   final)  
+    # 3. Rank sectors by mean absolute price change (base to final)
     abs_changes = np.zeros(n_all)
     count = 0
     for runs in reports.values():
@@ -1821,7 +1807,6 @@ def plot_sectoral_prices_comparison(reports, n_sectors=9):
     plt.tight_layout()
     plt.show()
 
-# plot_material_flows_comparison and plot_material_stocks_comparison removed for public release
 
 
 # =============================================================================

@@ -616,7 +616,7 @@ class ParametersCalibrated:
                 self.gov_sectors_[self.sectors.index(_name)] = 1
 
         # Non-oil-private mask: everything that is neither oil nor government
-        # NOTE: non_oil_sectors_ (= 1 − sectors_oil_) is kept unchanged for EX decomposition
+        # non_oil_sectors_ (= 1 - sectors_oil_) is used for the EX decomposition
         self.non_oil_private_sectors_ = 1 - self.sectors_oil_ - self.gov_sectors_
 
         # Base-year scaling factors so that the sums of the proxy sector variables
@@ -628,7 +628,7 @@ class ParametersCalibrated:
         self.Y_non_oil_scale = (self.ratio_non_oil_gdp * _Y_sum / _proxy_non_oil) if _proxy_non_oil > 0 else 1.0
         self.Y_oil_scale     = (self.ratio_oil_gdp     * _Y_sum / _proxy_oil)     if _proxy_oil     > 0 else 1.0
         self.Y_gov_scale     = (self.ratio_gov_gdp     * _Y_sum / _proxy_gov)     if _proxy_gov     > 0 else 1.0
-        # Net taxes: no sectoral proxy — grows in fixed proportion to total GDP
+        # Net taxes: no sectoral proxy, grows in fixed proportion to total GDP
         self.Y_net_taxes_base = self.ratio_net_taxes_gdp * _Y_sum
 
         # Initialise calibration-period values with the scaled sectoral proxies
@@ -667,7 +667,7 @@ class ParametersCalibrated:
             'Financial service activities, except insurance and pension funding')
         # Government ownership share of the banking sector (asset-weighted 2021):
         # ~44% of SNB (PIF ~37% + GOSI ~7%), 51% of Riyad Bank, 30% of Alinma (PIF+GOSI+PPA)
-        # weighted by total assets → ~22% system-wide.
+        # weighted by total assets -> ~22% system-wide.
         self.gov_bank_share = parameters.gov_bank_share
         self.s_public_[finance_sector] = self.gov_bank_share
         self.s_private_[finance_sector] = 1 - self.gov_bank_share
@@ -716,7 +716,7 @@ class ParametersCalibrated:
         ###############################################################################################################################
         ###############################################################################################################################
         ###############################################################################################################################
-        # IV. Macroeconomic time series — growth rates and averages
+        # IV. Macroeconomic time series: growth rates and averages
         ###############################################################################################################################
         ###############################################################################################################################
         ###############################################################################################################################
@@ -852,7 +852,7 @@ class ParametersCalibrated:
         ###############################################################################################################################
 
         ###########################################################################################################################
-        # 5.1 GDP Y — optimal lag order
+        # 5.1 GDP Y: optimal lag order
         ###########################################################################################################################
         # Shorten the time series so it starts in 2022; the last growth rate then refers to 2021, as intended.
         self.Y_timeseries = self.Y_timeseries[:-2]
@@ -871,7 +871,7 @@ class ParametersCalibrated:
         # The AR model is estimated on growth rates & the time series is restricted by begin_time_series_estimation
 
         ###########################################################################################################################
-        # 5.2 Inflation rates — time series estimation
+        # 5.2 Inflation rates: time series estimation
         ###########################################################################################################################
 
         self.Deflator_non_oil_GDP_timeseries = self.Non_oil_sector_deflator[:-2]
@@ -889,23 +889,18 @@ class ParametersCalibrated:
         # 5.3 Energy intensities
         ########################################################################
         try:
-            # Step 1: Load the CSV, assuming a standard comma delimiter.
-            # Use the 'sector' column as the index for robust alignment.
+            # Load the CSV (semicolon-separated) with the 'sector' column as index.
             df_energy = pd.read_csv(
                 "input_data/energy_intensities_for_model_only_2.csv",
                 delimiter=';',
                 index_col='sector'
             )
 
-            # Step 2: Create a template DataFrame with the model's official sector list.
-            # This ensures the data aligns with the model's official sector structure.
+            # Align the data to the model's sector list and order, missing sectors get 0.
             sectors_df = pd.DataFrame(index=self.sectors)
 
-            # Step 3: Reindex the loaded data to match the model's sector order.
-            # This will sort the data correctly and fill any missing sectors with 0.
             df_energy_aligned = df_energy.reindex(sectors_df.index).fillna(0)
 
-            # Step 4: Convert the final, aligned columns into NumPy arrays.
             self.gas_intensities_ = df_energy_aligned['gas_intensities_(GJ/Thousand_SAR)'].to_numpy(
             )
             self.electricity_intensities_ = df_energy_aligned[
@@ -914,18 +909,17 @@ class ParametersCalibrated:
             )
 
         except Exception as e:
-            print(f"CRITICAL ERROR loading energy_intensities.csv: {e}")
-            print("Please ensure the CSV file is clean, uses commas as separators, has the correct headers (sector, gas_intensities, etc.), and is in the 'input_data' folder.")
+            print(f"Error loading energy_intensities.csv: {e}")
+            print("Please ensure the CSV file is clean, uses semicolons as separators, has the correct headers (sector, gas_intensities, etc.), and is in the 'input_data' folder.")
             raise
 
         ########################################################################
         # 5.4 Emission intensities
         ########################################################################
-        # Legacy: these CSV-derived *_emission_intensities_ are not used downstream, and the raw
-        # CSV header's oil factor (66.3 MtCO2/EJ) is outdated. Emissions use the IPCC factors in 5.5.
+        # These CSV-derived *_emission_intensities_ are not used downstream (the oil factor in the CSV
+        # header, 66.3 MtCO2/EJ, differs from the IPCC value). Emissions use the IPCC factors in 5.5.
         try:
-            # Load emission intensity data, assuming standard comma delimiter.
-            # The sector names in the first column will be used to align the data.
+            # Load emission intensity data (semicolon-separated), aligned by the sector names in the first column.
             df_emission = pd.read_csv(
                 "input_data/emission_Factors_and_intensities_for_model_use.csv",
                 delimiter=';',
@@ -947,7 +941,7 @@ class ParametersCalibrated:
                 'oil_Emission_intensities (MtCO2/Thousand SAR)'].to_numpy()
 
         except Exception as e:
-            print(f"CRITICAL ERROR loading emission_intensities.csv: {e}")
+            print(f"Error loading emission_intensities.csv: {e}")
             print("Please ensure the CSV file is clean, has the correct headers (sector, gas_emission_intensities, etc.), and is in the 'input_data' folder.")
             raise
 
@@ -974,7 +968,7 @@ class ParametersCalibrated:
         # Scenario 2 (Vision 2030): The growth path will be calculated dynamically in the model
         # to reach 50% of total energy use by t=10 (year 2030).
 
-        # 4. Define Emission Factors (replacing the old intensity-based method)
+        # 4. Define Emission Factors
         # Using standard factors. Units: MtCO2 / GJ
         # Source: IPCC 2006 Guidelines for National Greenhouse Gas Inventories, Vol. 2, Table 1.4
         # (unchanged in the 2019 Refinement, Vol. 2, Ch. 1, Sec. 1.4: "No refinement").
@@ -983,7 +977,7 @@ class ParametersCalibrated:
         TJ_per_GJ = 1/1000
         Mt_per_kt = 1/1000
 
-        # --- EMISSION FACTORS (Corrected to MtCO2/GJ) ---
+        # --- EMISSION FACTORS (MtCO2/GJ) ---
         # 1. Base Factor in Tonnes/GJ
         # 56,100 kg/TJ = 56.1 Tonnes/TJ = 0.0561 Tonnes/GJ
         factor_gas_tonnes_gj = 0.0561
@@ -1014,8 +1008,8 @@ class ParametersCalibrated:
         # Check: with the 2021 generation mix (oil 38%, gas 62%) these values give about 565 g CO2/kWh,
         # close to the reported direct intensity (Ember 2023: 571-573 g/kWh; Climate Transparency 2022 /
         # Enerdata: 614 g/kWh). Ember's current data (~700 g CO2e/kWh) are lifecycle values incl. upstream
-        # methane and are not used. Replace with measured fleet efficiencies (SEC/ECRA) when available.
-        # Setting both to 1.0 reproduces the earlier model.
+        # methane and are not used. Measured fleet efficiencies (SEC/ECRA) are not published.
+        # Setting both to 1.0 treats generated electricity as fuel input.
         self.power_plant_efficiency_oil = 0.35
         self.power_plant_efficiency_gas = 0.45
 
@@ -1047,8 +1041,8 @@ class ParametersCalibrated:
         # structure and only adjusts the level. It is fitted (least squares) over 2021-2025 in the
         # Baseline scenario (with force_hist_national_co2 off), with the power sector following the
         # historical generation data, and is the same in all scenarios. It sets the level from 2026,
-        # when the historical values (b) no longer apply, so that 2026 continues smoothly from 2025. Fit (Oct 2026): 0.913; model (Baseline,
-        # not forced) vs. Energy Institute: 2021 +7.2%, 2022 -2.3%, 2023 -2.0%, 2024 -1.9%, 2025 -0.5%. Recompute with
+        # when the historical values (b) end, so that 2026 continues smoothly from 2025. With the factor 0.924,
+        # model (Baseline, not forced) vs. Energy Institute: 2021 +8.0%, 2022 -2.1%, 2023 -2.3%, 2024 -2.4%, 2025 -0.7%. Recompute with
         # model/calibrate_national_co2_factor.py whenever the energy data or the macro calibration change.
         # The power sector's own fuel use is set from the historical electricity data in
         # energy_module.py, so its row is not scaled. Applied here, before sections 5.7 and 5.8.
@@ -1069,22 +1063,21 @@ class ParametersCalibrated:
         # electricity demand equals observed generation in the last historical year (2025) and demand
         # continues from the observed level in 2026. Like the factor in (c) it is fitted on the Baseline
         # scenario and is the same in all scenarios (ELECTRICITY_SCALING_FACTOR, recomputed by
-        # model/calibrate_national_co2_factor.py). Before November 2026 it was recomputed inside every
-        # run (energy_module.py), which gave each scenario its own intensities (1.48 Baseline, 1.38
-        # Vision 2030, 1.42 Transformation): a scenario with higher output in 2025 received lower
-        # electricity intensities for all later years. Applied here, before sections 5.7 and 5.8, so that
+        # model/calibrate_national_co2_factor.py). A factor fitted within each run would give each scenario
+        # its own intensities, and a scenario with higher output in 2025 would receive lower electricity
+        # intensities for all later years. Applied here, before sections 5.7 and 5.8, so that
         # the efficiency tiers and costs use the same electricity quantities as the model run.
         self.electricity_intensities_gcam_ = self.electricity_intensities_.copy()
         self.electricity_scaling_factor = ParametersCalibrated.ELECTRICITY_SCALING_FACTOR
         self.electricity_intensities_ = self.electricity_intensities_gcam_ * self.electricity_scaling_factor
-        # (e) Process and other non-combustion emissions (added November 2026).
+        # (e) Process and other non-combustion emissions.
         # Defined as the residual between the official national total and the combustion CO2 the model
         # accounts for: 717.2 MtCO2e (2021, excluding LULUCF; Kingdom of Saudi Arabia, First Biennial
         # Transparency Report, National GHG Inventory Document, submitted to the UNFCCC in March 2025,
         # Table 1; CO2, CH4 and N2O, AR5 global warming potentials) minus the 2021 energy CO2 in (b).
         # The report gives no national total; 717.2 is the sum of its sector totals for 2021: energy
         # 579,622 Gg (incl. fugitive 17,312), IPPU 84,270, agriculture 9,205, waste 44,110 (LULUCF -7,509,
-        # so 709.7 with LULUCF). Until November 2026 the value was 716.1.
+        # so 709.7 with LULUCF).
         # The Energy Institute CO2 in (b) very likely includes international bunkers, which the
         # inventory excludes (Table 5: 13.0 Mt in 2021); inventory fuel combustion is 562.3 Mt. The 2021
         # total is matched exactly; the bunkers lower the process residual by about 10 Mt.
@@ -1114,7 +1107,7 @@ class ParametersCalibrated:
                 self.process_emissions_2021_mt_[self.sectors.index(name_)] = residual_mt_ * gg_ / items_total_gg_
 
         # (f) Drivers, abatement and abatement cost curves of the process and other non-combustion emissions
-        # (added November 2026; energy_module.process_emissions, energy_investment_module section 4b).
+        # (energy_module.process_emissions_and_abatement, energy_investment_module section 4b).
         # Each item is one model sector. Driver 'output': real output of the sector (2021 prices).
         # Driver 'population': population index, because waste and wastewater emissions follow the people
         # served, not the output of the treatment sectors (which rises with treatment and reuse investment).
@@ -1151,16 +1144,15 @@ class ParametersCalibrated:
             print(f"  Power CO2 2021: {self.power_co2_2021_mt:.1f} Mt; national 2021 (EI): {self.national_energy_co2_target_2021_mt} Mt")
             print(f"  Scaling factor for non-power oil and gas intensities: {self.national_co2_scaling_factor:.3f}")
 
-        # The emissions from electricity will now be calculated dynamically based on the
-        # decarbonization of its input fuels (handled in model.py)
-        # We need the index of the electricity sector for this.
+        # The emissions from electricity follow from its input fuels (energy_module.py),
+        # which needs the index of the electricity sector.
         self.electricity_sector_idx = self.sectors.index(
             'Electricity, gas, steam and air conditioning supply')
 
         ########################################################################
         # 5.6 Sectors for targeted oil reduction
         ########################################################################
-        # User specified: "Power Plants & Desalination", "Industry and Agriculture"
+        # Target groups: power plants & desalination, industry and agriculture
 
         sectors_to_reduce = [
             # 1. Power Plants & Desalination
@@ -1272,7 +1264,7 @@ class ParametersCalibrated:
             self.dI_Effic_ = self.dI_Effic_ / self.dI_Effic_.sum()
 
         ###########################################################################################################################
-        # 5.9 Government expenditures — AR model
+        # 5.9 Government expenditures: AR model
         ###########################################################################################################################
         # We use growth rates, since the total level of Gov Exp surpasses GY, but we use the growth rates
         # from GovExp to proxy growth rates in GY, since we do not have a good time series for GY
@@ -1289,7 +1281,7 @@ class ParametersCalibrated:
         # The AR model is estimated on growth rates & the time series is restricted by begin_time_series_estimation
 
         ###########################################################################################################################
-        # 5.10 Oil exports — AR model
+        # 5.10 Oil exports: AR model
         ###########################################################################################################################
         # Approximate OIL EXPORTS by oil activities
 
@@ -1303,7 +1295,7 @@ class ParametersCalibrated:
             self.oil_activities, max_lags, self.begin_time_series_estimation_oil)
 
         ###########################################################################################################################
-        # 5.11 Non-oil exports — AR model
+        # 5.11 Non-oil exports: AR model
         ###########################################################################################################################
         # Take from ts_exports data
         self.non_oil_export_timeseries = self.ts_exports['Grand Total'] - \
@@ -1319,7 +1311,7 @@ class ParametersCalibrated:
             self.non_oil_export_timeseries, max_lags, self.begin_time_series_estimation_nonoil_exp)
 
         ###########################################################################################################################
-        # 5.12 Imports — AR model
+        # 5.12 Imports: AR model
         ###########################################################################################################################
         self.IM_timeseries = self.IM_timeseries[:-2]
         # Begin time series estimation around 2005, to exclude some major structural breaks in Saudi economy
@@ -1473,11 +1465,11 @@ class ParametersCalibrated:
         self.PIF = 9.25e8 * 3.75  # PIF assets in SAR (reference value)
         # GV is initialized from the 2021 net international investment position.
         self.GV = self.ts_investment.loc[2021]["Net International Investment Position"]
-        # ── Government bond stock split (SAMA Annual Debt Statistics, 2021) ──────────────────────
+        # Government bond stock split (SAMA Annual Debt Statistics, 2021)
         # Initial domestic/external bond stocks are calibrated directly from ts_government.csv
         # (column section "Outstanding Public Debt at year end").
-        # 2021 outstanding: Internal (domestic) ≈ SAR 559 bn; External ≈ SAR 379 bn; Total ≈ SAR 938 bn.
-        # Source: SAMA Annual Statistics 2022, Table 4 — Public Debt by Resident/Non-resident.
+        # 2021 outstanding: Internal (domestic) approx. SAR 559 bn; External approx. SAR 379 bn; Total approx. SAR 938 bn.
+        # Source: SAMA Annual Statistics 2022, Table 4, Public Debt by Resident/Non-resident.
         _bond_domestic_2021 = self.ts_government.loc[2021, 'Internal (1).2']   # SAR ~559 bn domestic
         _bond_external_2021 = self.ts_government.loc[2021, 'External (1).2']   # SAR ~379 bn external
         _bond_total_2021    = self.ts_government.loc[2021, 'Total Public Debt (1)']  # SAR ~938 bn
@@ -1518,7 +1510,7 @@ class ParametersCalibrated:
         # 6.5 Productivity coefficient for target capital stock
         ########################################################################
         # Calibrate the sectoral productivity coefficient eta_K_ for the target capital stock,
-        # following Naqvi and Stockhammer (2018). K is approximated as KX × X (see parameters.KX).
+        # following Naqvi and Stockhammer (2018). K is approximated as KX * X (see parameters.KX).
         # The Y/X ratio from 2021 is used as a proxy for scaling.
         self.YX_ratio = np.sum(self.Y_) / np.sum(self.X_)
         self.X_timeseries = self.Y_timeseries/self.YX_ratio
@@ -1538,7 +1530,7 @@ class ParametersCalibrated:
         ###############################################################################################################################
 
         ########################################################################
-        # 7.1 Sectoral growth targets — Vision 2030
+        # 7.1 Sectoral growth targets: Vision 2030
         ########################################################################
         self.sectoral_yearly_growth_rates_V2030_ = np.zeros(self.S)
         self.sectoral_total_targets_V2030_ = np.zeros(self.S)
@@ -1582,12 +1574,7 @@ class ParametersCalibrated:
         self.sectoral_yearly_target_growth_rates_V2030_[self.sectors_plastic] = (
             1 + self.sectoral_total_targets_V2030_[self.sectors_plastic]) ** (1 / years_to_2030_timing) - 1
 
-        # below) collapses to near-zero production in the Vision_2030 scenario due to the 30% forced
-        # demand target (AI_hightech_sector_V2030_target) exceeding what the Leontief production
-        # function can supply given low flex_intermediate_inputs/flex_capital. The plot function
-        # (experiment_plots.py, plot_sectoral_gdp_comparison) contains a stability filter that
-        # auto-replaces this sector in the sectoral GDP comparison figure. The root-cause fix should
-        # address the demand-capacity mismatch — see also endogenize_input_output_matrix_A.py.
+        # AI and high-tech sectors
         self.sectors_AI_hightech = [
             self.sectors.index(
                 'Manufacture of computer, electronic and optical products'),
@@ -1623,7 +1610,7 @@ class ParametersCalibrated:
 
         ###############################################################################################################################
         ###############################################################################################################################
-        # 7.2 FDI data — net flows
+        # 7.2 FDI data: net flows
         # Source: FDI Bulletin 2023, Sheets 2-1 (stocks), 2-2 (net flows), 2-3 (gross inflows)
         # 18 aggregate sectors disaggregated to 85 model sectors using dX weights
         ###############################################################################################################################
@@ -1632,7 +1619,7 @@ class ParametersCalibrated:
             "input_data/ts_fdi.csv", index_col=0)
 
         # Mapping from model sector index to FDI aggregate sector name (NACE-based)
-        # Matches the NACE classification in postprocessing.py (lines 281-302)
+        # Same NACE grouping as in postprocessing.py
         def _get_fdi_sector(idx):
             """Map model sector index to FDI aggregate sector name."""
             if 0 <= idx <= 2:    return "Agriculture, forestry and fishing"       # A
@@ -1783,19 +1770,19 @@ class ParametersCalibrated:
                     print(f"    {yr}: Stock={actual:,.0f}  Implied={implied:,.0f}  Diff={diff:,.0f}")
                 max_diff = max(abs(d) for _, _, _, d in stock_check_results)
                 if max_diff < 1:
-                    print(f"    => PASS: Stock accounting identity holds (max diff = {max_diff:.0f})")
+                    print(f"    Stock accounting identity holds (max diff = {max_diff:.0f})")
                 else:
-                    print(f"    => NOTE: Stock accounting does not exactly hold (max diff = {max_diff:,.0f})")
-                    print(f"         This is expected: difference = valuation changes, exchange rate effects, etc.")
+                    print(f"    Stock accounting does not hold exactly (max diff = {max_diff:,.0f})")
+                    print(f"    The difference reflects valuation changes, exchange rate effects, etc.")
 
 
         ###############################################################################################################################
         ###############################################################################################################################
-        # 7.6 FDI calibration — growth targets and base-year values
+        # 7.6 FDI calibration: growth targets and base-year values
         ###############################################################################################################################
         ###############################################################################################################################
 
-        # Base year (2021) FDI values — these anchor the FDI module's starting point
+        # Base year (2021) FDI values: these anchor the FDI module's starting point
         # Use 2021 if available, otherwise use earliest year in data
         fdi_base_year = 2021 if 2021 in self.ts_fdi.index else self.ts_fdi.index[0]
 
@@ -1881,27 +1868,27 @@ class ParametersCalibrated:
         # Remittances as share of total wages (for reference)
         self.remittances_share_of_wages = self.remittances_base_year / np.sum(self.W_)
 
-        # Re-calibrate α2 now that remittances_base_year is available.
-        # Wage-financed gross consumption in the MODEL = α₁ × (YD_wage − remittances),
+        # Re-calibrate α2 with remittances_base_year.
+        # Wage-financed gross consumption in the MODEL = α1 * (YD_wage - remittances),
         # where YD_wage in the model already includes gov_exp_resid (social/transfer spending
-        # added to household wage income in model.py §12.6).  We must use the same definition
-        # here so that at the base year:
-        #   C_gross = (YD_wage + gov_exp_resid − remittances) + α₂ × YD_profit
-        # which implies α₂ = (C_gross − (YD_wage + gov_exp_resid − remittances)) / YD_profit.
-        # Note: gov_exp_resid is already in the V equation via YD_wage; do NOT add it separately.
-        # α2 can remain fixed in model runs because in Mode A (remittances_follow_wage_growth=True)
+        # added to household wage income in model.py, section 12.6). The same definition is used
+        # here, so that at the base year:
+        #   C_gross = (YD_wage + gov_exp_resid - remittances) + α2 * YD_profit
+        # which implies α2 = (C_gross - (YD_wage + gov_exp_resid - remittances)) / YD_profit.
+        # gov_exp_resid is already in the V equation via YD_wage and is not added separately.
+        # α2 can remain fixed in model runs because with remittances_follow_wage_growth = True
         # remittances and wages grow proportionally, keeping the leakage share stable over time.
         C_wage_financed = self.YD_wage + self.gov_exp_resid - self.remittances_base_year
         self.C_profit_inc_gross = self.C_gross - C_wage_financed
         self.α2 = self.C_profit_inc_gross / self.YD_profit
         if verbose:
             print(f"  α2 calibrated (with gov_exp_resid + remittances leakage): {self.α2:.4f}"
-                  f"  (naive wages-only: {(self.C_gross - self.YD_wage) / self.YD_profit:.4f})")
+                  f"  (wages only: {(self.C_gross - self.YD_wage) / self.YD_profit:.4f})")
 
         ###############################################################################################################################
         # 7.8 Balance of Payments initial values
         ###############################################################################################################################
-        # Government Gross External Asset Stock (Gov_ext_assets) — initial stock
+        # Government Gross External Asset Stock (Gov_ext_assets): initial stock
         # Proxy: PIF value (self.GV) represents the bulk of Saudi government foreign assets
         # In reality Gov_ext_assets = SAMA reserves + PIF foreign holdings (gross; liabilities tracked separately)
         # Using GV as approximation; can be refined with SAMA reserve data
@@ -1918,26 +1905,25 @@ class ParametersCalibrated:
             print(f"  Remittances / GDP (2021): {self.remittances_base_year / self.GDP:.4%}")
             print(f"  Remittances / Wages (2021): {self.remittances_share_of_wages:.4%}")
             print(f"  Avg. remittances growth rate ({remit_start}-{remit_end}): {self.gRemittances_avg:.4%}")
-            print(f"  Gov_ext_assets initial (PIF proxy): {self.Gov_ext_assets_initial:,.0f} (1000 SAR) = {self.Gov_ext_assets_initial/1e6:.2f} Bn SAR")
+            print(f"  Gov_ext_assets initial: {self.Gov_ext_assets_initial:,.0f} (1000 SAR) = {self.Gov_ext_assets_initial/1e6:.2f} Bn SAR")
 
 
         ###############################################################################################################################
         ###############################################################################################################################
         ###############################################################################################################################
-        # VIII. Energy block — historical electricity data, RE costs, and investment
+        # VIII. Energy block: historical electricity data, RE costs, and investment
         ###############################################################################################################################
         ###############################################################################################################################
         ###############################################################################################################################
 
         self.GJ_PER_GWH = 3600  # 1 GWh = 1000 MWh = 3600 GJ
-        # 1. Load NEW Historical Electricity Mix Data (GWh)
-        # Historical electricity mix data (GWh)
+        # 1. Historical electricity mix data (GWh)
         # 2020-2025: Ember, Yearly Electricity Data (release of April 2026),
         #   https://ember-energy.org/data/yearly-electricity-data/ ; identical to Energy Institute (2026),
         #   Statistical Review of World Energy, "Electricity generation" and "Electricity generation by
         #   fuel" (Saudi Arabia: 392.9 TWh in 2021, 409.8 in 2022, 433.2 in 2023, 458.4 in 2024, 471.4 in 2025).
         #   Ember's "Solar" includes solar thermal, so "Solar thermal" is 0 for these years.
-        # Before 2020: earlier source of the model (unchanged).
+        # Before 2020: data set of the original model version.
         hist_data_str = """Oil   68103   2000     GWh
         Oil 63535   2001     GWh
         Oil 62584   2002     GWh
@@ -2092,7 +2078,7 @@ class ParametersCalibrated:
             index='Year', columns='Source', values='GWh').fillna(0)
 
         # 2. Add Bioenergy Data
-        # (Bioenergy is absent from the updated data source, so it is added back from earlier data)
+        # (Bioenergy is not in the Ember / Energy Institute data, so it comes from the original data set)
         bioenergy_data = {
             'Year': [2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023],
             'Bioenergy': [25, 26, 28, 30, 32, 35, 38, 40, 42, 45]
@@ -2135,8 +2121,8 @@ class ParametersCalibrated:
         hist_re_gj = self.hist_power_solar_gj + self.hist_power_wind_gj + self.hist_power_bio_gj
         self.hist_power_re_share = hist_re_gj / self.hist_power_total_gen_gj
         # Baseline (trend) renewables after 2025: the average annual increase of 2023-2025 is added each
-        # year (linear continuation of the recent pace, +7.5 TWh/yr). This replaces the exponential trend
-        # (gRE_trend_rate, 15.4%/yr), which from the observed 2025 level would exceed total electricity
+        # year (linear continuation of the recent pace, +7.5 TWh/yr). An exponential trend
+        # (gRE_trend_rate, 15.4%/yr) from the observed 2025 level would exceed total electricity
         # demand around 2050.
         self.re_trend_annual_addition_gj = (hist_re_gj[-1] - hist_re_gj[-3]) / 2
 
@@ -2176,8 +2162,8 @@ class ParametersCalibrated:
         # Calculate shares *within* the fossil fuel mix (for future gap-filling)
         self.ff_oil_share_2023 = gen_2023_oil_gj / total_ff_2023_gj
         self.ff_gas_share_2023 = gen_2023_gas_gj / total_ff_2023_gj
-        # The future fossil mix starts from the last historical year (2025), not 2023, so that it
-        # continues from the data used for 2021-2025 (names kept for compatibility).
+        # The future fossil mix starts from the last historical year (2025), so that it
+        # continues from the data used for 2021-2025 (the variables keep the suffix _2023).
         self.ff_oil_share_2023 = self.hist_power_oil_share_ff[-1]
         self.ff_gas_share_2023 = self.hist_power_gas_share_ff[-1]
 
@@ -2187,10 +2173,10 @@ class ParametersCalibrated:
             self.hist_elec_wind_gj[0] +
             self.hist_elec_bio_gj[0]
         )
-        # 5. Rename initial RE generation for get_starting_values
+        # Alias of the initial RE generation for get_starting_values
         self.initial_RE_generation = self.initial_RE_generation_gj
         if verbose:
-            print("--- New Historical Data & Shares Calibrated ---")
+            print("--- Historical Electricity Data & Shares Calibrated ---")
             print(f"  2023 RE Solar Share: {self.re_solar_share:.2%}")
             print(f"  2023 RE Wind Share: {self.re_wind_share:.2%}")
             print(f"  2023 RE Bio Share: {self.re_bio_share:.2%}")
@@ -2243,7 +2229,6 @@ class ParametersCalibrated:
             print(f"  t=3 (2023) Share: {self.re_target_share_ramp[2]:.4%}")
             print(f"  t=10 (2030) Share: {self.re_target_share_ramp[-1]:.4%}")
             print("--- Vision 2030 Ramp Shares Calibrated. ---")
-            # --- END: NEW HISTORICAL DATA & RENEWABLE CALIBRATION ---
 
         ########################################################################
         # 8.1 Renewable energy cost and investment calibration
@@ -2293,7 +2278,7 @@ class ParametersCalibrated:
         self.capex_wind_per_gj = get_capex_per_gj('Onshore Wind')
         self.capex_bio_per_gj = get_capex_per_gj('Bioenergy (WTE)')
 
-        # 2. Store the weighted average (keep this for backward compatibility if needed)
+        # 2. Weighted average CapEx per GJ
         self.re_capex_per_gj_year = (
             (self.capex_solar_per_gj * self.re_solar_share) +
             (self.capex_wind_per_gj * self.re_wind_share) +
@@ -2301,7 +2286,6 @@ class ParametersCalibrated:
         ) / total_share
 
         # OpEx in Thousand SAR per GJ of energy produced (used as price)
-        # (We can keep using the average for OpEx or split it similarly if needed later)
         avg_lcoe_usd_per_mwh = (
             (technologies['Solar PV']['lcoe_usd_per_mwh'] * self.re_solar_share) +
             (technologies['Onshore Wind']['lcoe_usd_per_mwh'] * self.re_wind_share) +
@@ -2325,14 +2309,13 @@ class ParametersCalibrated:
         _dI_RE_raw = np.array(
             [re_investment_shares.get(sector, 0) for sector in self.sectors]
         )
-        # Normalize robustly by the actual sum (consistent with dI_Effic_ and dI_Electrification_)
-        # Using /100 assumed all 6 sector names matched exactly; /sum() is safe even if any name differs.
+        # Normalise by the actual sum (as for dI_Effic_ and dI_Electrification_), so the shares
+        # sum to 1 even if a sector name does not match.
         self.dI_RE_ = _dI_RE_raw / _dI_RE_raw.sum() if _dI_RE_raw.sum() > 0 else _dI_RE_raw
         raw_re_2020_gj = df_pivot_gwh.loc[2020, ['Solar', 'Wind', 'Bioenergy']].sum() * self.GJ_PER_GWH
         raw_re_2021_gj = df_pivot_gwh.loc[2021, ['Solar', 'Wind', 'Bioenergy']].sum() * self.GJ_PER_GWH
 
-        # 2. Determine the reduction factor currently in use
-        # Compare the stored (reduced) 2021 value with the raw 2021 value
+        # 2. Scaling factor of the historical RE data (stored 2021 value against the raw 2021 value)
         if raw_re_2021_gj > 0:
             current_reduction_factor = self.initial_RE_generation_gj / raw_re_2021_gj
         else:
@@ -2340,7 +2323,7 @@ class ParametersCalibrated:
 
         # 3. Apply this factor to 2020 data to be consistent
         re_2020_reduced_gj = raw_re_2020_gj * current_reduction_factor
-        re_2021_reduced_gj = self.initial_RE_generation_gj # This is already reduced
+        re_2021_reduced_gj = self.initial_RE_generation_gj # already scaled
 
         # 4. Calculate the capacity added in 2021
         # Formula: New Capacity = K(t) - K(t-1) * (1 - depreciation)
@@ -2373,8 +2356,8 @@ class ParametersCalibrated:
         try:
             # get_agr_data returns dicts {Year: Value}, plus the derived 2021 crop share.
             # Pass in the 2021 IOT total output for the combined agriculture sector so the
-            # crop/livestock split is derived from actual base-year data instead of a
-            # hardcoded ratio, and reconciles exactly with the IOT in 2021.
+            # crop/livestock split is derived from base-year data and reconciles exactly
+            # with the IOT in 2021.
             # Population growth is passed from the scenario parameters so that the crop module and
             # the economic core use the same population path (0 in the steady-state validation run).
             (crop_X_dict, agr_intensity_dict, agr_irrigation_invest_dict, agr_irrigation_om_dict,
@@ -2406,7 +2389,7 @@ class ParametersCalibrated:
                 self.crop_X[i] = crop_X_dict.get(y, 0.0)
                 # AGR_X: Total Output = Crop Output / crop_share_2021, where crop_share_2021
                 # is the crop share of the combined sector's 2021 IOT total output (held
-                # fixed for all years — see get_agr_data).
+                # fixed for all years: see get_agr_data).
                 if self.crop_X[i] > 0 and crop_share_2021 > 0:
                     self.AGR_X[i] = self.crop_X[i] / crop_share_2021
                 else:
@@ -2427,7 +2410,7 @@ class ParametersCalibrated:
                                             for i in range(max_t)])
             self.agr_diet_factor = np.array([agr_details["diet_factor"].get(start_sim_year + i, 1.0)
                                              for i in range(max_t)])
-            # Existing agricultural water path (crop withdrawal + residual scaled with crop output)
+            # Reference agricultural water path (crop withdrawal + residual scaled with crop output)
             self.agr_water_base = np.array([agr_details["water_base"].get(start_sim_year + i, 0.0)
                                             for i in range(max_t)])
             # Water intensity of non-fodder crops (m3 per 1000 SAR), reflects the scenario's
@@ -2470,9 +2453,8 @@ class ParametersCalibrated:
         elec_idx = self.electricity_sector_idx
         target_indices = [i for i in sorted_fossil_indices if i != elec_idx]
         
-        # Select Top 15 most intensive, then drop air and water transport (November 2026): aviation and
-        # shipping cannot be electrified at scale by 2060, and before this change 80% of their fuel was
-        # shifted to the grid by 2060. The remaining 13 sectors are refining, chemicals, cement, metal
+        # Select Top 15 most intensive, then drop air and water transport: aviation and
+        # shipping cannot be electrified at scale by 2060. The remaining 13 sectors are refining, chemicals, cement, metal
         # ore mining, land transport and pipelines, warehousing, motor trade and vehicle-intensive services.
         not_electrifiable_ = {self.sectors.index('Air transport'), self.sectors.index('Water transport')}
         self.electrification_target_sectors = np.array([i for i in target_indices[-15:] if i not in not_electrifiable_])

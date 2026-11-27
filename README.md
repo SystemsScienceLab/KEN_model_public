@@ -30,7 +30,7 @@ This version of the KEN model (version 1.1) is the current KEN model working ver
 ## Model structure
 
 Overview of the calculation order and dependencies of each variable.
-![SFC_CORE Model Structure](KEN_framework.png)
+![KEN Model Structure](KEN_framework.png)
 
 ## VSCode Tips
 

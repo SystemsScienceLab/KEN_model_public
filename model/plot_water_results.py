@@ -26,13 +26,13 @@ from model.water_module import get_supply_mix_config, get_agr_data
 from model.experiment_plots import SCENARIO_LABELS
 
 # ==========================================
-# 1. ENHANCED EXPERIMENT RUNNER
+# 1. EXPERIMENT RUNNER
 # ==========================================
 
 class WaterResultRunner(ExperimentRunner):
     """
-    A specialized runner to ensure all water-related data (Agriculture, 
-    Policy Targets, etc.) are correctly injected into each scenario run.
+    Experiment runner that also returns the water-related results (agriculture,
+    irrigation cost series) of each scenario run.
     """
     def single_run(self, scenario: str, seed: int, parameter_overrides: dict = None):
         # Map scenario names to internal configuration keys
@@ -87,7 +87,7 @@ class WaterResultRunner(ExperimentRunner):
             "results_macro": results.macro, 
             "results_sectoral": results.sectoral, 
             "scenario": scenario,
-            # Add new cost data
+            # Irrigation cost data
             "irrigation_invest": agr_invest,
             "irrigation_om": agr_om,
             "irrigation_subsidy": agr_subsidy
@@ -208,8 +208,7 @@ def plot_water_use_comparison(all_results):
 def plot_water_balance_verification(all_results):
     """
     Plot 2: water_balance_verification.png
-    Area Stackplot: Maintained original formatting. Main title removed.
-    Legend strictly on the first plot only.
+    Area stackplot without main title, legend on the first plot only.
     """
     fig, axes = plt.subplots(1, 3, figsize=(24, 6))
     axes = axes.flatten()
@@ -322,8 +321,7 @@ def plot_scenario_trends_comparison(all_results):
 def plot_sectoral_supply_mix(all_results, all_sectoral_results):
     """
     Plot 4: water_sectoral_supply_mix.png
-    Bar Plot: Maintained original formatting. Main title removed.
-    Legend strictly on the first plot only.
+    Bar plot without main title, legend on the first plot only.
     """
     scenarios = list(all_results.keys())
     sectors = ['Agriculture', 'Industry', 'Service', 'Household']
@@ -666,7 +664,7 @@ def plot_water_results():
     # Process macro results for existing plots
     processed_results = {sc: raw_results[sc][0]["results_macro"] for sc in scenarios_to_run}
     
-    # Process sectoral results for the new plot
+    # Sectoral results for the sectoral supply-mix plot
     processed_sectoral = {sc: raw_results[sc][0]["results_sectoral"] for sc in scenarios_to_run}
 
     # Process cost data

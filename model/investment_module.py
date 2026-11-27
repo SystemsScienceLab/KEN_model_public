@@ -32,17 +32,15 @@ def set_investment_trend(v: ModelVariables, p: ModelParameters, pc: ParametersCa
         # Correction disabled: use raw calibrated trend rate
         v.gI_trend_endog[t] = pc.gI_avg
     else:
-        # ──────────────────────────────────────────────────────────────────
         # Semi-endogenous Keynesian dampening of exogenous investment trend
         # Motivation: even with an exogenous trend rate, large macro
         # imbalances should moderate investment (Keynesian channel):
-        #   1. Gov deficit crowding-out: high deficit → higher borrowing
+        #   1. Gov deficit crowding-out: a high deficit means higher borrowing
         #      costs and reduced business confidence
-        #   2. Profit rate decline: lower retained earnings → less internal
+        #   2. Profit rate decline: lower retained earnings leave less internal
         #      finance available for new investment
         # Both signals are measured at t-1, normalised to GDP, and combined
-        # additively into correction_factor ∈ [0,1] scaling pc.gI_avg.
-        # ──────────────────────────────────────────────────────────────────
+        # additively into correction_factor in [0,1] scaling pc.gI_avg.
         gdp_t1 = max(np.sum(v.Y_[t-1]), 1.0)   # positive aggregate GDP denominator
 
         # Signal 1: government deficit / GDP
@@ -73,9 +71,8 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
     energy_investment_module(v, p, pc, t)
 
     # Trend growth rate of investment for this period. It is used by desalination, wastewater and the
-    # electricity base below, so it must be set first (November 2026 fix: it used to be set only in
-    # section 3, after these uses, which then read 0). In t = 1 it is set in section 3 as before, so the
-    # base year still reproduces the input-output table.
+    # electricity base below, so it must be set first. In t = 1 it is set in section 3, so that the
+    # base year reproduces the input-output table.
     if t > 1:
         set_investment_trend(v, p, pc, t)
 
@@ -93,7 +90,6 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
     else:
         # 1. Determine Growth Strategy
         # Use High Growth if: (Gap Exists) OR (Vision 2030) OR (High Growth Policy)
-        # 2. Desalination Investment
         # Strategy:
         # - Before 2030: Force high growth (Policy Driven) IF the scenario supports it (p.desalination_high_growth == 1).
         # - After 2030: High growth only if water gap exists (Demand Driven).
@@ -167,11 +163,8 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
     ########################################################################################################################################################################################################################
     # 3. General sectoral investment distribution
     ########################################################################################################################################################################################################################
-# --------------------------------------------------------------------------------
-    # --- UPDATED THEME 2: ELECTRICITY SECTOR BASELINE & GRID UPGRADES ---
-    # --------------------------------------------------------------------------------
+    # --- ELECTRICITY SECTOR BASELINE & GRID UPGRADES ---
     # 1. Total Base trend investment: 2021 value from the IO tables, then growing with the trend rate
-    #    (November 2026 fix: it used to restart from the 2021 value every year)
     if t == 1 or not hasattr(v, '_I_elec_base'):
         v._I_elec_base = np.zeros(len(v.gI_trend_endog))
         total_base_elec_inv = float(np.sum(pc.I_[pc.electricity_gas_AC_sector]))
@@ -194,7 +187,7 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
         # Base cost is ~2,200 SAR/kW. Assuming 60% load factor (18.92 GJ/year) -> ~116 SAR/GJ.
         grid_upgrade_cost = (v.electrification_added_load[t] * getattr(p, 'grid_upgrade_cost_per_gj', 116.0)) / 1000.0
 
-        # --- DEFINE SECTORAL SHARES FOR BUILDING THE GRID (Mapped to exact KEN sectors) ---
+        # --- SECTORAL SHARES FOR BUILDING THE GRID (KEN sectors) ---
         grid_upgrade_shares = {
             'Manufacture of electrical equipment': 0.45,  # Transformers, substations, switchgear
             'Civil engineering': 0.40,                    # Towers, trenching, foundations
@@ -215,20 +208,19 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
     if t == 1:
         I_ALL_except_energy_desal_wwater = v.I_total[t-1]  - pc.I_desal - pc.I_wwater - pc.I_RE
     else:    
-        # We must subtract EVERYTHING added in the previous year to find the true economic baseline
+        # Subtract all energy and net-zero investment of the previous year to get the economic baseline
         prev_netzero_total = (np.sum(v.I_netzero_ccs_[t-1]) + np.sum(v.I_netzero_nature_[t-1]) +
                               (np.sum(v.I_netzero_ccu_[t-1]) if hasattr(v, 'I_netzero_ccu_') else 0) +
-                              np.sum(v.I_process_abatement_[t-1]))   # November 2026: process abatement, so it does not compound into trend investment
+                              np.sum(v.I_process_abatement_[t-1]))   # process abatement, so it does not compound into trend investment
         
         # v.I_[t-1][sector] already INCLUDES the efficiency added in the previous period.
-        # Subtracting v.I_efficiency_total[t-1] on top of that would double-count the efficiency
-        # for the desal, wwater, and electricity sectors. Subtract efficiency back from each
-        # energy sector's value before adding v.I_efficiency_total.
+        # Efficiency is therefore taken out of each energy sector's value and v.I_efficiency_total
+        # is added once, so it is not counted twice for the desal, wwater and electricity sectors.
         prev_energy_total = (
             (v.I_[t-1][pc.sector_desal]              - v.I_efficiency_[t-1][pc.sector_desal]) +
             (v.I_[t-1][pc.sector_wwater]             - v.I_efficiency_[t-1][pc.sector_wwater]) +
             (v.I_[t-1][pc.electricity_gas_AC_sector] - v.I_efficiency_[t-1][pc.electricity_gas_AC_sector]) +
-            v.I_efficiency_total[t-1] +       # now added once for ALL sectors (including the three above)
+            v.I_efficiency_total[t-1] +       # added once for ALL sectors (including the three above)
             v.I_electrification_total[t-1] +
             prev_netzero_total
         )
@@ -260,7 +252,7 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
     if p.Endogenous_investment:  # Endogenous investment in current formulation is only effective if coupled with Endogenous_A_matrix = True
         if t == 1:
             v.gI_endog_[t] = v.gI_trend_endog[t] * np.ones_like(v.gI_endog_[t])
-            # Adjusted to subtract both desalination and wastewater initial investments
+            # Base excludes the initial desalination, wastewater and renewable investment
             v.I_[t][sectors_to_include] = I_ALL_except_energy_desal_wwater * (1 + v.gI_endog_[t][sectors_to_include]) * v.Sectoral_investment_distribution_[t][sectors_to_include]
         # Endogenous investment includes a scarcity constraint-induced additional investment mechanism, designed to alleviate scarcity constraints
         # The trend rate gI_trend_endog[t] is set by set_investment_trend() at the start of this function (t > 1)
@@ -312,8 +304,8 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
     # 5. FDI module: Decompose investment into domestic + FDI components
     ########################################################################################################################################################################################################################
     # Pre-compute I_total[t] here so fdi_module can compute FDI_share_of_investment
-    # and apply the 95% aggregate cap correctly. It will be recomputed later (model.py
-    # line ~941) after any countercyclical policy boost, so there is no double-counting.
+    # and apply the 95% aggregate cap correctly. It is recomputed in model.py after any
+    # countercyclical policy boost, so there is no double-counting.
     v.I_total[t] = np.sum(v.I_[t])
     fdi_module(v, p, pc, t)
 
@@ -324,12 +316,10 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
     # Create Storage Demand Vector
     storage_demand_vec = np.zeros(pc.S)
     storage_demand_vec[mach_idx] = v.I_storage_local[t] # Only local generates domestic activity
-    # 3. Update the Demand Vector
+    # RE investment demand vector
     re_investment_demand_ = v.I_RE[t] * pc.dI_RE_
     
-    # --------------------------------------------------------------------------------
-    # ---  HYDROGEN INVESTMENT DEMAND (Supply Chain) ---
-    # --------------------------------------------------------------------------------
+    # --- HYDROGEN INVESTMENT DEMAND (Supply Chain) ---
     h2_investment_demand_ = np.zeros(pc.S)
     
     if v.I_hydrogen[t] > 0:
@@ -346,7 +336,6 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
             else:
                 fallback_idx = pc.sectors.index('Construction of buildings') if 'Construction of buildings' in pc.sectors else 0
                 h2_investment_demand_[fallback_idx] += v.I_hydrogen[t] * share
-    # --------------------------------------------------------------------------------
 
     nz_investment_demand_ = (total_ccs_inv + total_nature_inv + total_ccu_inv) * pc.dI    
     efficiency_investment_demand = v.I_efficiency_total[t] * pc.dI_Effic_
@@ -354,21 +343,19 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
     
 # Compute "other" as the exact residual so that sum(I_demand_[t]) = sum(I_[t]) - I_storage_import
     # by construction, regardless of any distribution-vector normalisation.
-    # ── IDENTITY GUARDS (always run at t=3) ──────────────────────────────────
+    # Check once (t = 3) that all distribution vectors sum to 1
     if t == 3:
         assert abs(np.sum(pc.dI) - 1.0) < 1e-6,               f"pc.dI does not sum to 1: {np.sum(pc.dI)}"
         assert abs(np.sum(pc.dI_RE_) - 1.0) < 1e-6,           f"pc.dI_RE_ does not sum to 1: {np.sum(pc.dI_RE_)}"
         assert abs(np.sum(pc.dI_Effic_) - 1.0) < 1e-6,        f"pc.dI_Effic_ does not sum to 1: {np.sum(pc.dI_Effic_)}"
         assert abs(np.sum(pc.dI_Electrification_) - 1.0) < 1e-6, f"pc.dI_Electrification_ does not sum to 1: {np.sum(pc.dI_Electrification_)}"
-        # ─────────────────────────────────────────────────────────────────────────────
 
-    # Use np.sum(re_investment_demand_) instead of v.I_RE[t]:
-    # If dI_RE_ sums to slightly more than 1 (duplicate sector entries in pc.sectors), the old
-    # formula subtracted I_RE but added back I_RE * sum(dI_RE_) > I_RE, creating a positive gap.
-    # Using the ACTUAL demand sum as the subtractor forces the identity to hold always.
-    # All other distribution vectors (dI_Effic_, dI_Electrification_, dI, h2/grid shares) are
-    # verified to sum to 1.0, so their scalar vs np.sum() forms are equivalent.
-    # ── OTHER INVESTMENT DEMAND — pure residual approach ─────────────────────────
+    # The residual subtracts np.sum(re_investment_demand_), not v.I_RE[t]. If dI_RE_ sums to slightly
+    # more than 1 (duplicate sector entries in pc.sectors), subtracting I_RE while adding back
+    # I_RE * sum(dI_RE_) would create a positive gap. Subtracting the actual demand sum keeps the
+    # identity exact. All other distribution vectors (dI_Effic_, dI_Electrification_, dI, h2/grid
+    # shares) sum to 1.0 (checked above), so their scalar and np.sum() forms are equivalent.
+    # OTHER INVESTMENT DEMAND: pure residual approach
     # Compute the scalar residual first (what is NOT explained by named components)
     _other_scalar = (
         np.sum(v.I_[t])
@@ -380,16 +367,15 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
         - np.sum(nz_investment_demand_)          # = (ccs+nature+ccu) * dI summed
         - v.I_storage[t]                 # full storage (local + import)        
     )
-    # Distribute residual by pc.dI (must sum to 1.0 — guarded above)
+    # Distribute residual by pc.dI (sums to 1.0, checked above)
     other_investment_demand_ = np.maximum(0, _other_scalar) * pc.dI
-# ─────────────────────────────────────────────────────────────────────────────
 
 
     # --- EFFICIENCY DEMAND NORMALISATION ---
     # v.I_efficiency_[t] is computed from energy intensities (energy_investment_module).
     # v.I_efficiency_total[t] is the scalar used in ownership allocation for v.I_[t].
-    # These can diverge due to different sector weights. Force the demand vector
-    # to sum to the same total as the ownership scalar so CHECK 2 stays clean.
+    # These can diverge due to different sector weights. The demand vector is scaled
+    # to the ownership total, so the investment identity holds.
     if v.I_efficiency_total[t] > 0 and np.sum(v.I_efficiency_[t]) > 0:
         v.I_efficiency_[t] = (
             v.I_efficiency_[t]
@@ -397,7 +383,7 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
             * v.I_efficiency_total[t]
         )
 
-    # Final Sum (Added grid_upgrade_demand_)
+    # Total investment demand vector
     v.I_demand_[t] = (other_investment_demand_ + 
                       re_investment_demand_ + 
                       efficiency_investment_demand + 
@@ -447,7 +433,7 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
             # Use np.sum(re_investment_demand_) so the accounting identity
             # sum(I_demand_) = sum(I_[t]) - I_storage_import holds by construction
             # even after the public-investment boost.
-            # ── OTHER INVESTMENT DEMAND — pure residual approach ─────────────────────────
+            # OTHER INVESTMENT DEMAND: pure residual approach
             # Compute the scalar residual first (what is NOT explained by named components)
             _other_scalar = (
                 np.sum(v.I_[t])
@@ -459,9 +445,8 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
                 - np.sum(nz_investment_demand_)          # = (ccs+nature+ccu) * dI summed
                 - v.I_storage[t]                 # full storage (local + import)        
             )
-            # Distribute residual by pc.dI (must sum to 1.0 — guarded above)
+            # Distribute residual by pc.dI (sums to 1.0, checked above)
             other_investment_demand_ = np.maximum(0, _other_scalar) * pc.dI
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 
@@ -476,7 +461,6 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
                               electrification_investment_demand_ + 
                               storage_demand_vec + 
                               grid_upgrade_demand_)
-            # --------------------------------------------------------------------------------
             
         else:
             v.Gov_confidence_boost[t] = 0
@@ -491,16 +475,14 @@ def investment_module(v: ModelVariables, p: ModelParameters, pc: ParametersCalib
     # (FDI-financed portion does not burden the domestic government budget)
     v.GI[t] = np.sum(v.I_public_dom_[t])
 
-    # After the root-cause fix in Section 6 (using np.sum(re_investment_demand_) instead of
-    # v.I_RE[t] as the subtractor), the accounting identity holds BY CONSTRUCTION:
+    # Investment accounting identity (holds by construction, see section 6):
     #   sum(I_demand_[t]) = sum(I_[t]) - I_storage_import
-    # The only expected gap is the storage-import leakage (battery hardware that routes to IM
-    # rather than domestic demand — by design). Everything else should be ~0.
+    # The only gap is imported battery hardware, which goes to IM rather than domestic demand.
     sum_I = np.sum(v.I_[t])
     sum_Demand = np.sum(v.I_demand_[t])
 
     gap = sum_Demand - sum_I
     expected_gap = -v.I_storage_import[t]   # storage imports route to IM, not I_demand_
-    adjusted_gap = gap - expected_gap        # should be ~0 after Section 6 fix
+    adjusted_gap = gap - expected_gap        # zero if the identity holds
 
     ###################################################################################################################################################################################################################################################################################################

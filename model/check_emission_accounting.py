@@ -1,4 +1,16 @@
-"""Read-only check of the emission and energy accounting of a saved KEN run (November 2026).
+# =============================================================================
+# Lead model conceptualization and development (theory, methodology, and
+# implementation), software architecture & model coding (all components),
+# data acquisition & processing, team supervision: Michael Miess
+# Initial software architecture development, first coding, technical consulting:
+# Joel Foramitti
+# Lead of energy modeling: Ansir Ilyas
+# Lead of water modeling: Dan Wang
+# Model consulting & support: Asjad Naqvi
+# Project conceptualization, funding & supervision: Yoshihide Wada
+# =============================================================================
+
+"""Read-only check of the emission and energy accounting of a saved KEN run.
 
 Run from the repository root:  python -m model.check_emission_accounting saved_results/<file>.pkl
 
@@ -11,9 +23,9 @@ Prints four blocks:
      electricity of the sectors that are not electrified, desalination kWh per m3.
   4. Oil and gas use in 2021 (EJ, combustion).
 
-What a pass looks like:
+Expected results:
   - 2021 national total equals the inventory total, combustion equals the Energy Institute value.
-  - Inventory categories within about 15% (the allocation of GCAM energy to IO sectors differs, see notes).
+  - Inventory categories within about 15% (the allocation of GCAM energy to IO sectors differs from the inventory categories).
   - The electricity demand cap binds in no year (block 3), electricity of the non-electrified sectors in
     the transformation scenario is not below the baseline, desalination needs at least 2 kWh per m3.
   - Air and water transport are not electrification targets.

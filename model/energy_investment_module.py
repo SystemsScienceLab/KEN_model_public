@@ -18,7 +18,6 @@ Computes all energy-related investments: renewable energy (solar, wind, bio),
 industrial electrification, hydrogen, net-zero (CCS, nature-based, CCU),
 energy efficiency, and battery storage.
 
-This module was extracted from investment_module.py for code clarity.
 It is called at the beginning of investment_module() before desalination,
 wastewater, and general sectoral investment distribution.
 
@@ -43,8 +42,8 @@ from .utils import real_output_2021_prices
 
 
 def process_hydrogen_capacity(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrated, t: int):
-    """Electrolyser capacity for process abatement in year t (GJ H2 per year) and its investment
-    (November 2026). It follows last year's unconstrained hydrogen need of process abatement
+    """Electrolyser capacity for process abatement in year t (GJ H2 per year) and its investment.
+    It follows last year's unconstrained hydrogen need of process abatement
     (energy_module.process_emissions_and_abatement), extrapolated by one year of growth, at 90%
     utilisation. Total clean hydrogen (this capacity plus the existing hydrogen path) stays within the
     national cap (energy_module.hydrogen_cap_gj). Depreciation 5% a year, as for the existing
@@ -65,7 +64,7 @@ def process_hydrogen_capacity(v: ModelVariables, p: ModelParameters, pc: Paramet
 
 
 def process_abatement_investment(v: ModelVariables, p: ModelParameters, pc: ParametersCalibrated, t: int):
-    """Investment in process abatement in year t by emitting sector (thousand SAR), November 2026.
+    """Investment in process abatement in year t by emitting sector (thousand SAR).
 
     Capital stock of abatement of an item = sum over cost tiers of (tonnes abated in the tier x capex
     per tonne of annual abatement). The cost tiers rise, so deep abatement costs more per tonne
@@ -95,10 +94,10 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
 
     Parameters
     ----------
-    v  : ModelVariables        — model state arrays (modified in-place)
-    p  : ModelParameters       — scenario parameters
-    pc : ParametersCalibrated  — calibrated parameters
-    t  : int                   — current time step (1-indexed, t=1 is 2021)
+    v  : ModelVariables        model state arrays (modified in-place)
+    p  : ModelParameters       scenario parameters
+    pc : ParametersCalibrated  calibrated parameters
+    t  : int                   current time step (1-indexed, t=1 is 2021)
     """
 
     ########################################################################################################################################################################################################################
@@ -190,7 +189,7 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
         v.I_RE[t] = v.I_solar[t] + v.I_wind[t] + v.I_bio[t]
 
     else:
-        # --- POST-2023 FORECAST ---
+        # --- FORECAST (after the historical years) ---
         
         # A. Calculate Base Grid Demand
         base_grid_demand = v.electricity_use_total[t-1]
@@ -213,7 +212,7 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
             # 2. Phase 2: Grow from V2030 level to 85% by 2060
             else:
                 # Get the share achieved in 2030
-                share_in_2030 = pc.re_target_share_ramp[-1] # Likely 0.50
+                share_in_2030 = pc.re_target_share_ramp[-1]
                 
                 # Calculate progress between 2030 and 2060
                 years_past_2030 = t - v2030_idx
@@ -244,13 +243,13 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
         # C. Add Electrification Load
         if p.enable_industrial_electrification:
             target_RE_generation += v.electrification_added_load[t]
-        # C2. Dedicated renewables for process hydrogen (November 2026): electrolysers for process
+        # C2. Dedicated renewables for process hydrogen: electrolysers for process
         # abatement (section 3b below) get their own renewable capacity, like industrial electrification.
         process_hydrogen_capacity(v, p, pc, t)
         target_RE_generation += v.k_hydrogen_process_physical[t] * 0.9 * p.hydrogen_efficiency
-        # C3. Dedicated renewables for the existing (mainly export) hydrogen as well (November 2026).
-        # Before, electrolysis took renewable electricity from the grid and fossil plants filled the gap.
-        # Same capacity path as in section 3 below.
+        # C3. Dedicated renewables for the existing (mainly export) hydrogen as well, so that
+        # electrolysis does not take renewable electricity from the grid. Same capacity path as in
+        # section 3 below.
         if p.enable_green_hydrogen and t >= pc.policy_start_t:
             if t <= 10:
                 base_h2_capacity = p.hydrogen_target_2030_gj * (t - pc.policy_start_t + 1) / (10 - pc.policy_start_t + 1)
@@ -343,7 +342,7 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
         
         # COST CALCULATION:
         # Capacity Added (Mt) * Cost (SAR/tonne) * 1000 -> Thousand SAR
-        # Note: We multiply by 1000 because model units are usually '000 SAR
+        # We multiply by 1000 because model units are usually '000 SAR
         cost_ccs = ccs_added * p.CCS_cost_per_tonne * 1000.0
         
         # Assign to Chemicals Sector (Proxy for Heavy Industry)
@@ -407,7 +406,7 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
         # CCU (Methanol, Synfuels, Urea) fits best in "Manufacture of chemicals"
         chem_idx = pc.sectors.index('Manufacture of chemicals and chemical products') if 'Manufacture of chemicals and chemical products' in pc.sectors else 0
         
-        # Store in variable (I_netzero_ccu_ must be defined in ModelVariables)
+        # Store in variable
         if hasattr(v, 'I_netzero_ccu_'):
              v.I_netzero_ccu_[t][chem_idx] = cost_ccu
 
@@ -416,7 +415,7 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
     ########################################################################################################################################################################################################################
     if p.enable_energy_efficiency_gains and t >= pc.policy_start_t:
         # 1. Determine the Targeted Efficiency Gain % for this year (Sectors)
-        # This matches the logic that WILL happen in energy_module later
+        # Same gains as applied in energy_module
         efficiency_gains = np.zeros(pc.S)
         
         # Assign gains based on tiers (defined in calibration)
@@ -437,7 +436,7 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
         
         # 4. Calculate Investment Cost (Thousand SAR)
         # Cost = Energy Saved (GJ) * Base Capex Cost (SAR/GJ)
-        # Note: pc.base_efficiency_capex_ is calibrated in calibration.py
+        # pc.base_efficiency_capex_ is calibrated in calibration.py
         v.I_efficiency_[t] =  energy_saved_gj * pc.base_efficiency_capex_
         
         # 5. Sum to Total
@@ -541,7 +540,7 @@ def energy_investment_module(v: ModelVariables, p: ModelParameters, pc: Paramete
         
         # 4. Localization Strategy (Import vs Local)
         # ----------------------------------------------------
-        # "Initial import 100%, after reaching 10% coverage (2030), start producing inhouse until 100%"
+        # Storage is fully imported until coverage reaches 10% (around 2030), then local production rises to 100%
         
         if coverage < 0.10:
             local_share = 0.0 # 100% Import

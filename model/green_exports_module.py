@@ -35,7 +35,7 @@ def calculate_green_exports_and_substitution(v, p, pc, t):
         
     export_multiplier = 0.10 
 
-    # Robust Sector Lookup
+    # Sector lookup
     def get_idx(name, default_idx):
         if hasattr(pc, 'sectors') and name in pc.sectors:
             return pc.sectors.index(name)
@@ -105,7 +105,7 @@ def calculate_green_exports_and_substitution(v, p, pc, t):
         local_storage_val = domestic_storage_market * v.storage_local_share[t]
         
         # This local production replaces imports in the Machinery/Electrical sector
-        # (Assuming storage falls under Machinery or Electrical - adjusting to Electrical here for batteries)
+        # (Batteries are assigned to the Electrical equipment sector)
         v.IM_[t][elec_idx] = np.maximum(0, v.IM_[t][elec_idx] - local_storage_val)
 
         if v.storage_local_share[t] >= 0.99:
