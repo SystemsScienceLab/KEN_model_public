@@ -2,8 +2,7 @@
 ## Public releases of the KAUST Economy-Nature (KEN) model, developed and maintained at the KAUST Systems Science Lab
 
 ## Documentation
-This version of the KEN model (version 1.1) is the current KEN model working version. The model description (work in progress) is forthcoming on SSRN. Current working title: 
-“Economic diversification is not primarily a market outcome: Industrial policy and biophysical limits in an energy-rich and water-scarce economy”.
+This version of the KEN model (version 1.1) is the current KEN model working version. The model description and paper “Economic diversification is not primarily a market outcome: Industrial policy and biophysical limits in an energy-rich and water-scarce economy” is currently under review. A preprint is available on SSRN: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=7740298. 
 
 ## Content:
 - KEN Model: Data, code, visualizations, and run files.
